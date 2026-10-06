@@ -6,6 +6,8 @@ A personal whole-genome exploration tool. It turns a 30x WGS dataset into a fast
 
 > **Not medical advice:** results are for education and exploration. Confirm anything clinically relevant with a clinical-grade test and a genetic counsellor.
 
+**New to genetics?** Start with the [friendly introduction to your genome](docs/GENETICS_PRIMER.md). It explains every term, file and report in this project, with diagrams.
+
 ## How it is laid out on the drive
 
 ```

@@ -82,3 +82,14 @@ def test_config_file_relative_paths_and_host_override(tmp_path, monkeypatch):
     assert cfg.workspace == (tmp_path / "drive" / "out").resolve()
     assert cfg.search == [(tmp_path / "drive" / "data").resolve()]
     assert discover(cfg).first("vcf") is not None
+
+
+def test_zip_of_pdfs_is_a_report_bundle(tmp_path):
+    with zipfile.ZipFile(tmp_path / "reports.zip", "w") as zf:
+        zf.writestr("a_report.pdf", b"%PDF-1.4 fake")
+        zf.writestr("b_report.pdf", b"%PDF-1.4 fake")
+    make_raw(tmp_path / "geno.zip")
+    cfg = load_config(data=[str(tmp_path)], workspace=str(tmp_path / "ws"))
+    kinds = {f.path.name: (f.kind, f.meta.get("pdfs")) for f in discover(cfg).files}
+    assert kinds["reports.zip"] == ("report", 2)
+    assert kinds["geno.zip"][0] == "raw_genotypes"

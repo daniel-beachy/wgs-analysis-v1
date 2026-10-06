@@ -169,13 +169,26 @@ def _looks_like_raw_genotypes(lines: list[str]) -> bool:
     return len(data) >= 3 and all(RAW_HEADER.match(ln.strip()) for ln in data[:20])
 
 
+def parse_report_bundle(path: Path) -> dict | None:
+    """A zip containing only PDFs (e.g. tellmeGen per-condition report downloads)."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = [i.filename for i in zf.infolist() if not i.is_dir()
+                     and not i.filename.split("/")[-1].startswith("._") and not i.filename.startswith("__MACOSX")]
+    except Exception:
+        return None
+    if names and all(n.lower().endswith(".pdf") for n in names):
+        return {"zipped": True, "pdfs": len(names)}
+    return None
+
+
 def parse_raw_genotypes(path: Path) -> dict | None:
     """23andMe/tellmeGen-style `rsid chrom pos genotype` (plain or zipped)."""
     try:
         if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as zf:
                 members = [i for i in zf.infolist() if not i.filename.split("/")[-1].startswith("._")
-                           and not i.is_dir()]
+                           and not i.is_dir() and not i.filename.lower().endswith(".pdf")]
                 for info in members:
                     with zf.open(info) as fh:
                         head = io.TextIOWrapper(fh, errors="replace").read(16384).splitlines()[:-1]
@@ -221,6 +234,9 @@ def classify(path: Path) -> InputFile | None:
     if head.startswith(b"%PDF"):
         provider = "tellmeGen" if "tellmegen" in str(path).lower() else None
         return InputFile("report", path, size, {"provider": provider})
+    if head.startswith(b"PK") and (bundle := parse_report_bundle(path)):
+        provider = "tellmeGen" if "tellmegen" in str(path).lower() else None
+        return InputFile("report", path, size, {"provider": provider, **bundle})
     if head.startswith(b"PK") or lower.endswith((".txt", ".tsv", ".txt.gz")):
         meta = parse_raw_genotypes(path)
         if meta is not None:

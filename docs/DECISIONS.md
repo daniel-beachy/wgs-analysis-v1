@@ -57,3 +57,8 @@ Each entry gives the decision, the alternatives considered, and why. Newest at t
 - `wgs run` runs a fixed list of stages. Each one writes a stamp: stage version, input size and mtime, and parameters. Unchanged stages are skipped, `--force` reruns them, and failures write tracebacks to `logs/<stage>.log`.
 - Large temporary files go to internal-disk scratch (`$WGS_SCRATCH` or `$TMPDIR`), not the exFAT drive.
 - Coverage uses `mosdepth --fast-mode` with quantized bins (0, 1–4, 5–9, 10–149, 150+). The VCF is not a gVCF, so the callable BED is what separates "homozygous reference" from "not covered" at any position.
+
+## ADR-010 Learning first
+
+- **Principle:** the tool is for someone who is curious and learning about their own genome. That shapes every section and every UI decision.
+- **In practice:** every metric, term and finding gets a plain-language explanation that you can reach in one hover or click: tooltips, "what does this mean?" expanders, small diagrams, and links into `docs/GENETICS_PRIMER.md`. Jargon is always defined where it first appears. Each claim shows its evidence and confidence in words, not just as a score. Reports explain *why* something matters, or why it probably doesn't.
