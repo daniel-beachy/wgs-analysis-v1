@@ -23,6 +23,8 @@ ruff = ">=0.6"
 mosdepth = ">=0.3.10"
 numpy = ">=2.5.3,<3"
 pandas = ">=3.0.6,<4"
+nodejs = ">=26.10.0,<26.11"
+go = ">=1.27.1,<2"
 
 [pypi-dependencies]
 wgs = { path = ".", editable = true }
@@ -34,3 +36,4 @@ test = "pytest -q"
 lint = "ruff check src tests scripts"
 install-hooks = "git config core.hooksPath scripts/hooks"
 guard = "python scripts/data_guard.py --all"
+build-dashboard = "python scripts/build_dashboard.py"

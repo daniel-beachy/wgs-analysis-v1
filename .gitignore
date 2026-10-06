@@ -27,6 +27,11 @@ wgs.local.toml
 
 # --- Build output ---
 /launcher/dist/
+/launcher/bin/
+/launcher/app/*
+!/launcher/app/README.txt
+/launcher/*.syso
+/launcher/winres/
 /viewer/dist/
 /viewer/node_modules/
 /viewer/public/duckdb/

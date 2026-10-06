@@ -78,3 +78,26 @@ def test_qc_concordance_and_sex(ctx):
     # rs1 het, rs2 hom-alt, rs3 multiallelic het, rs4 RefCall → reference via VCF REF; DI is not an SNV
     assert c["discordant"] == 0 and c["concordant_variant"] == 3 and c["concordant_reference"] == 1
     assert out["inferred_sex"]["call"] == "XY"
+
+
+def test_publish_creates_release_once_and_reuses_objects(ctx):
+    from wgs.stages import publish
+
+    for st in (variants.STAGE, genotypes.STAGE, qc.STAGE):
+        run_stage(ctx, st)
+    first = publish.build(ctx)
+    assert first["new"] and first["tables"]["variants"] == 7
+    rd = publish.releases_dir(ctx)
+    index = json.loads((rd / "index.json").read_text())
+    assert index["latest"] == first["release"]
+    manifest = json.loads((rd / index["releases"][0]["manifest"]).read_text())
+    assert {"variants", "raw_genotypes"} <= set(manifest["tables"]) and "qc" in manifest["documents"]
+    con = duckdb.connect()
+    # rsIDs are joined in from the provider genotype file
+    vpath = rd / manifest["tables"]["variants"]["path"]
+    assert con.execute(f"SELECT rsid FROM '{vpath}' WHERE pos = 200").fetchone()[0] == "rs2"
+    # nothing changed → no new release, and objects are content-addressed (no duplicates)
+    n_objects = len(list((rd / "objects").iterdir()))
+    again = publish.build(ctx)
+    assert not again["new"] and again["release"] == first["release"]
+    assert len(list((rd / "objects").iterdir())) == n_objects

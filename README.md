@@ -12,9 +12,11 @@ A personal whole-genome exploration tool. It turns a 30x WGS dataset into a fast
 
 ```
 Genomics/
-├── WGS/                 your provider delivery (read-only; any layout works)
-├── wgs-analysis-v1/     this repo (code)
-└── wgs-data/            workspace: caches, intermediate files, dated result releases, dashboard
+├── WGS/                     your provider delivery (read-only; any layout works)
+├── wgs-analysis-v1/         this repo (code)
+├── wgs-data/                workspace: caches, intermediate files, dated result releases
+├── Genome Dashboard.app     double-click on a Mac (Apple Silicon or Intel)
+└── Genome Dashboard.exe     double-click on Windows (x64)
 ```
 
 Nothing is tied to fixed paths. Inputs are found by **content** (VCF/CRAM headers, magic bytes) anywhere under the search folders. Paths in `wgs.local.toml` are resolved relative to the file, so the drive can be mounted anywhere. You can override paths per machine (`[host."name"]`), with environment variables (`WGS_DATA`, `WGS_WORKSPACE`, `WGS_CONFIG`) or with CLI flags (`--data`, `--workspace`, `--sample`).
@@ -48,7 +50,17 @@ pixi run wgs run --only qc        # a single stage
 pixi run wgs run --force coverage # recompute one stage
 ```
 
-Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth) and `qc`. Results go to `wgs-data/work/<sample>/`.
+Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth), `qc` and `publish`. Working files go to `wgs-data/work/<sample>/`. `publish` then writes a dated, read-only **release** to `wgs-data/releases/` — that is all the dashboard reads.
+
+## Opening the dashboard (any machine, nothing to install)
+
+Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` folder (`.app` on a Mac, `.exe` on Windows). Your browser opens on a local page (`http://127.0.0.1:8787`); the program quits by itself about a minute after you close the tab. Everything runs on your computer — no internet needed, nothing is uploaded.
+
+- **First launch on a Mac:** if macOS says it can't verify the developer, right-click the app → **Open** → **Open** (only needed once per machine). Files copied by Finder from the internet get this flag; files built locally don't.
+- **First launch on Windows:** if SmartScreen appears, click **More info → Run anyway**.
+- The launcher finds `wgs-data/releases` by looking next to and above itself, so the drive letter or mount point doesn't matter. To point it elsewhere: `"Genome Dashboard.exe" --data D:\path\to\wgs-data` (or set `WGS_RELEASES`). A log is written to the temp folder as `genome-dashboard.log`.
+
+**Rebuilding the dashboard** (after changing `viewer/` or `launcher/`, on the Mac): `pixi run build-dashboard`. It builds the viewer and both launchers in internal scratch space (exFAT can't hold npm's symlinks) and copies the results next to `wgs-data/`. For live development: `cd $TMPDIR/wgs-build/viewer && WGS_RELEASES=<path to wgs-data/releases> npx vite` after one build.
 
 ## About the reference genome
 

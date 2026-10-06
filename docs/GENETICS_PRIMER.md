@@ -345,7 +345,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **GIAB / HG002** | Genome in a Bottle; a benchmark person with a "truth" genome |
 | **gnomAD** | Large public database of population allele frequencies |
 | **GQ** | Genotype quality (Phred-scaled) |
-| **GT** | Genotype (`0/0`, `0/1`, `1/1`…) |
+| **Genotype (GT)** | Which versions you carry at a position, one per copy: `0/0`, `0/1`, `1/1`… (0 = reference, 1 = variant) |
 | **gVCF** | A VCF that also lists reference-matching blocks (yours is *not* a gVCF) |
 | **Haplogroup** | Branch of the maternal (mtDNA) or paternal (Y) lineage tree |
 | **Hemizygous** | Only one copy present (e.g. X in XY people) |
@@ -385,6 +385,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Ti/Tv** | Transition-to-transversion ratio (QC metric) |
 | **Transition / transversion** | A↔G or C↔T / all other single-letter swaps |
 | **VAF** | Variant allele fraction: share of reads showing the variant |
+| **Variant** | A position where your DNA differs from the reference genome — usually harmless, everyone has ~4–5 million |
 | **VCF** | Variant Call Format: the standard variant file |
 | **VUS** | Variant of uncertain significance |
 | **WGS** | Whole-genome sequencing |
