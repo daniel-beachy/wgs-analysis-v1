@@ -33,7 +33,7 @@ from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, write_json
-from . import annotate, coverage, genotypes, qc, reads, reference, variants
+from . import annotate, coverage, genotypes, pgx, qc, reads, reference, variants
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -107,8 +107,18 @@ def _annotations_sql(ctx: Context) -> str:
     return f"SELECT * FROM '{annotate.annotations_path(ctx)}' ORDER BY chrom_order, pos, alt"
 
 
+def _claims_in(ctx: Context) -> list[Path]:
+    paths = [p for p in (annotate.claims_path(ctx), pgx.out_paths(ctx)["claims"]) if p.exists()]
+    return paths
+
+
 def _claims_sql(ctx: Context) -> str:
-    return f"SELECT * FROM '{annotate.claims_path(ctx)}' ORDER BY section, claim_id"
+    union = " UNION ALL BY NAME ".join(f"SELECT * FROM '{p}'" for p in _claims_in(ctx))
+    return f"SELECT * FROM ({union}) ORDER BY section, claim_id"
+
+
+def _pgx_sql(key: str) -> Callable[[Context], str]:
+    return lambda ctx: f"SELECT * FROM '{pgx.out_paths(ctx)[key]}'"
 
 
 def _genes_in(ctx: Context) -> list[Path]:
@@ -158,11 +168,17 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Genome partitioned into CALLABLE / LOW / NO_COVERAGE intervals"),
     ("annotations", "1", lambda c: [annotate.annotations_path(c)], _annotations_sql,
      "Your variant alleles with gene effect (Ensembl/bcftools csq), ClinVar, 1000 Genomes and gnomAD frequencies"),
-    ("claims", "1", lambda c: [annotate.claims_path(c)], _claims_sql,
+    ("claims", "2", _claims_in, _claims_sql,
      "Graded statements about your genotypes: evidence strength, call confidence, reasons and sources"),
     ("acmg_genes", "1", _acmg_in, _acmg_sql,
      "ACMG secondary-findings genes checked, with how much of each gene region was callable in your data"),
     ("genes", "1", _genes_in, _genes_sql, "Ensembl gene coordinates (GRCh37) for searching by gene name"),
+    ("pgx_genes", "1", lambda c: [pgx.out_paths(c)["genes"]], _pgx_sql("genes"),
+     "Medicines: your diplotype, phenotype and call confidence for each pharmacogene (PharmCAT + outside callers)"),
+    ("pgx_drugs", "1", lambda c: [pgx.out_paths(c)["drugs"]], _pgx_sql("drugs"),
+     "Medicines: every drug guideline/label PharmCAT matched against your genotypes (CPIC, DPWG, FDA)"),
+    ("pgx_positions", "1", lambda c: [pgx.out_paths(c)["positions"]], _pgx_sql("positions"),
+     "Medicines: how each PharmCAT-defined position was genotyped from your data (and why if missing)"),
 ]
 
 
@@ -174,6 +190,8 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "fastq_stats": reads.fq_out(ctx),
         "reference_full": reference.full_decode_file(ctx),
         "annotate": annotate.summary_path(ctx),
+        "pgx": pgx.out_paths(ctx)["summary"],
+        "pgx_report": pgx.out_paths(ctx)["report"],
     }
     return {k: v for k, v in docs.items() if v.exists()}
 
@@ -189,7 +207,9 @@ def _knowledge(ctx: Context, annotated: bool) -> dict:
     if not annotated:
         return {"versions": {}, "evidence_model": None, "sources": {}}
     summary = json.loads(annotate.summary_path(ctx).read_text())
-    used = summary.get("knowledge", {})
+    used = dict(summary.get("knowledge", {}))
+    if pgx.out_paths(ctx)["summary"].exists():
+        used.update(json.loads(pgx.out_paths(ctx)["summary"].read_text()).get("knowledge", {}))
     idx = Store(ctx.cfg).index()["sources"]
     sources = {}
     for sid, ver in used.items():
@@ -246,7 +266,8 @@ def build(ctx: Context) -> dict:
     documents = {}
     for name, src in _documents(ctx).items():
         key = _key(name, hashlib.sha256(src.read_bytes()).hexdigest())
-        documents[name] = _put_object(rd, name, key, "json", lambda dest, s=src: shutil.copyfile(s, dest))
+        documents[name] = _put_object(rd, name, key, src.suffix.lstrip("."),
+                                      lambda dest, s=src: shutil.copyfile(s, dest))
     for name, payload in (("inventory", _inventory(ctx)), ("sections", evaluate(ctx.inv, ctx.cfg))):
         text = json.dumps(payload, indent=1, default=str)
         documents[name] = _put_object(rd, name, _key(name, text), "json", lambda dest, t=text: dest.write_text(t))

@@ -39,9 +39,9 @@ MODULES: list[Module] = [
         Enhancer(("fastq",), "read-level metrics (base quality, read length, instrument)"),
     ]),
     Module("pgx", "Pharmacogenomics", VARIANTS, [
-        Enhancer(("cram", "reference"), "CYP2D6 copy number / hybrid alleles from reads"),
-        Enhancer(("external:pharmcat",), "ingest a PharmCAT report produced elsewhere"),
+        Enhancer(("cram", "reference"), "CYP2D6 star alleles + copy number (Cyrius) and HLA typing (T1K) from reads"),
         Enhancer(("external:cyrius",), "ingest a Cyrius CYP2D6 call produced elsewhere"),
+        Enhancer(("external:t1k",), "ingest a T1K HLA genotype produced elsewhere"),
     ]),
     Module("health", "Health & disease risk", VARIANTS, [
         Enhancer(("cram", "reference"), "distinguish 'reference' from 'not covered' at key positions"),

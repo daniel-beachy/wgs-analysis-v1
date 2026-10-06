@@ -280,11 +280,23 @@ Everyone has around 100 high-impact variants. Most are in genes that can tolerat
 
 ### Pharmacogenomics (PGx): genes and medicines
 
-- Enzymes such as **CYP2D6**, **CYP2C19** and **CYP2C9** break down many drugs. Gene versions are named with **star alleles** (`*1` = typical, `*2`, `*4`…). Your pair is a **diplotype**, e.g. `*1/*4`.
-- The diplotype gives a **metaboliser phenotype**: **poor**, **intermediate**, **normal**, **rapid** or **ultrarapid**. A poor metaboliser may build up a drug to toxic levels, or fail to activate a pro-drug such as codeine or clopidogrel.
-- Guidelines come from **CPIC** and **DPWG**, curated by **ClinPGx** (formerly PharmGKB). **CPIC levels A/B** mean actionable prescribing advice exists.
-- **PharmCAT** is the standard tool that turns a VCF into these calls.
-- **Never change a medication based on this without your doctor.** A clinical PGx test confirms the result.
+Most medicines are cleared or switched on by a small set of enzymes, mostly in the liver. Your versions of those genes decide how *fast* each enzyme works, and so how much of a drug ends up in your blood.
+
+```
+ dose ─▶ [ enzyme ] ─▶ cleared        slow enzyme  → drug builds up   → more side effects
+                                     fast enzyme  → cleared quickly  → may not work
+ pro-drug ─▶ [ enzyme ] ─▶ ACTIVE    slow enzyme  → little activated → may not work (codeine, clopidogrel)
+```
+
+- **Star alleles and diplotypes.** Each version of a pharmacogene is a named **star allele**: `*1` is usually the typical one; `*2`, `*4`… are specific combinations of variants defined by **PharmVar**. You have two copies, so your result is a pair, the **diplotype**, e.g. `*1/*4`.
+- **Function and activity score.** Each allele has a function (normal, decreased, no function, increased). For some genes these add up to an **activity score**: normal + normal = 2; normal + none = 1.
+- **Metaboliser phenotype.** The diplotype translates into **poor**, **intermediate**, **normal**, **rapid** or **ultrarapid** metaboliser. Transporters use "decreased / normal / increased function". These are normal human variation, not diseases. They only matter when you take a drug that depends on the enzyme.
+- **Guidelines.** **CPIC** (US) and **DPWG** (Netherlands) are expert panels that publish what a prescriber should do for each phenotype: standard dose, a different dose, or a different drug. CPIC rates each recommendation *strong*, *moderate* or *optional*. **ClinPGx** (formerly PharmGKB) curates these guidelines and FDA label text.
+- **Calling.** **PharmCAT** (the open tool clinical labs use) reads the variant file, works out diplotypes and matches them to every guideline. Three kinds of gene need help, given to PharmCAT as **outside calls**:
+  - *CYP2D6* has a near-identical neighbour (the pseudogene *CYP2D7*) and is often deleted or duplicated, so it is called from the raw reads by **Cyrius**, which counts copies.
+  - **HLA** genes (the immune system's "ID tags") have tens of thousands of versions; **T1K** types them from the reads. Certain HLA versions predict severe reactions to drugs like abacavir, allopurinol and carbamazepine.
+  - *MT-RNR1* lives in mitochondrial DNA; rare variants cause hearing loss with aminoglycoside antibiotics.
+- **Never change a medication based on this without your doctor.** A clinical PGx test confirms the result. Many hospitals now order one before prescribing clopidogrel or fluorouracil.
 
 ### Ancestry
 
@@ -355,15 +367,17 @@ The joining happens on your own computer. Your variants are never sent to an onl
 
 | Term | Meaning |
 |---|---|
+| **1000 Genomes** | Public reference panel of 2,504 people from 26 populations across 5 continents |
 | **ACMG/AMP** | US professional bodies whose guidelines define the five-tier variant classification |
-| **Actionability** | Whether something can be done (screening, prevention, treatment) if you have a variant; ClinGen scores this per gene |
-| **AlphaMissense** | Google DeepMind AI model scoring how likely a protein change (missense) is to be harmful, 0–1; above 0.564 is "likely pathogenic" |
 | **ACMG SF** | List of medically actionable genes reported as "secondary findings" |
+| **Actionability** | Whether something can be done (screening, prevention, treatment) if you have a variant; ClinGen scores this per gene |
+| **Activity score** | For some pharmacogenes, the sum of your two alleles' function values (normal = 1, decreased = 0.5 or 0.25, none = 0); 2 is typical |
 | **AD** | Allelic depth: reads supporting each allele |
 | **Admixture** | Estimated mix of ancestral populations |
 | **AF / Allele frequency** | How common a variant is: the share of chromosomes in a population that carry it |
-| **Allele** | One version of a sequence at a position (e.g. A or G) |
 | **Alignment / mapping** | Placing reads at their position on the reference |
+| **Allele** | One version of a sequence at a position (e.g. A or G) |
+| **AlphaMissense** | Google DeepMind AI model scoring how likely a protein change (missense) is to be harmful, 0–1; above 0.564 is "likely pathogenic" |
 | **ALT** | The non-reference allele |
 | **Autosomal dominant (AD)** | One altered copy on chromosomes 1–22 can cause the condition; each child of a carrier has a 1-in-2 chance of inheriting it |
 | **Autosomal recessive (AR)** | Both copies on chromosomes 1–22 must be altered; one copy makes you a healthy carrier |
@@ -373,95 +387,101 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Base / base pair (bp)** | One DNA letter / one letter plus its partner |
 | **bgzip / tabix** | Block compression plus index that allow random access into big text files |
 | **Build** | A version of the reference genome |
-| **Call confidence** | How sure we are that your genotype at a position is right (High / Medium / Low), from read depth, GQ and read balance |
 | **Callable** | A region with enough good-quality reads to trust a genotype, including "matches reference" |
+| **Call confidence** | How sure we are that your genotype at a position is right (High / Medium / Low), from read depth, GQ and read balance |
 | **Carrier** | Has one altered copy of a recessive gene |
 | **chrM / mtDNA** | Mitochondrial genome |
+| **ClinGen** | Expert consortium rating how strongly each gene is linked to each disease (Definitive → Refuted) |
 | **ClinVar** | Public database of variant–disease classifications |
 | **CNV** | Copy-number variant |
-| **ClinGen** | Expert consortium rating how strongly each gene is linked to each disease (Definitive → Refuted) |
+| **Compound heterozygous** | Two *different* altered variants in the same gene, one on each copy; for a recessive condition this can be like having two altered copies, but only if they are on different copies (not "in cis") |
 | **Concordance** | Agreement between two sets of genotype calls |
 | **Consequence** | What a variant does to a gene: missense, synonymous, frameshift, intron… |
 | **Contig** | A continuous piece of the reference sequence |
-| **Compound heterozygous** | Two *different* altered variants in the same gene, one on each copy; for a recessive condition this can be like having two altered copies, but only if they are on different copies (not "in cis") |
 | **Coverage / depth (DP)** | Number of reads over a position |
 | **CPIC / DPWG** | Pharmacogenomic guideline groups (US / Netherlands) |
+| **Cyrius** | Illumina's open tool that calls *CYP2D6* star alleles from reads by counting gene copies |
+| **dbSNP / rsID** | Catalogue of known variants and their IDs |
 | **DeepVariant** | Google's deep-learning variant caller, used by tellmeGen |
 | **Digenic** | A condition that needs variants in two different genes together |
 | **Diplotype** | Your pair of star alleles for a gene |
-| **dbSNP / rsID** | Catalogue of known variants and their IDs |
 | **Duplicate reads** | PCR copies of the same DNA fragment |
 | **Evidence grade** | How strong the science behind a claim is (Strong / Moderate / Limited), with the reasons listed |
 | **Exon / intron** | Parts of a gene kept in / spliced out of the RNA |
 | **FASTA** | Text format for sequences (used for the reference) |
 | **FASTQ** | Text format for raw reads plus quality scores |
 | **Frameshift** | An indel that shifts the 3-letter reading frame and usually breaks the protein |
+| **Genotype (GT)** | Which versions you carry at a position, one per copy: `0/0`, `0/1`, `1/1`… (0 = reference, 1 = variant) |
 | **GIAB / HG002** | Genome in a Bottle; a benchmark person with a "truth" genome |
 | **gnomAD** | Large public database of population allele frequencies |
 | **GQ** | Genotype quality (Phred-scaled) |
-| **Genotype (GT)** | Which versions you carry at a position, one per copy: `0/0`, `0/1`, `1/1`… (0 = reference, 1 = variant) |
 | **gVCF** | A VCF that also lists reference-matching blocks (yours is *not* a gVCF) |
 | **Haplogroup** | Branch of the maternal (mtDNA) or paternal (Y) lineage tree |
 | **Hemizygous** | Only one copy present (e.g. X in XY people) |
 | **Heteroplasmy** | A mitochondrial variant present in only some mtDNA copies |
 | **Heterozygous / homozygous** | Two different / two identical alleles |
 | **HGVS** | Standard notation for describing variants (`c.` = coding DNA, `p.` = protein) |
+| **HLA (human leukocyte antigen)** | Immune-system genes that label your cells as "self"; extremely variable, and some versions predict severe drug reactions |
 | **Impact** | How disruptive a consequence is: High (likely breaks protein), Moderate, Low, Modifier (non-coding) |
-| **Inheritance** | How a condition passes through families: dominant, recessive, X-linked, mitochondrial, etc. It decides what one copy of a variant means for you |
 | **Indel** | Small insertion or deletion |
+| **Inheritance** | How a condition passes through families: dominant, recessive, X-linked, mitochondrial, etc. It decides what one copy of a variant means for you |
 | **LOEUF** | gnomAD measure of how well a gene tolerates broken copies: low (under ~0.35) means healthy people almost never have one, so breaking it likely matters |
 | **LoF** | Loss-of-function: variant expected to disable a gene copy |
+| **Majority allele / reference-minor site** | A spot where the reference genome happens to carry the *rarer* version, so the "variant" listed is actually what most people have. Example: the GRCh37 reference carries Factor V Leiden (rs6025); most people, and a "two copies" result, have the normal version |
 | **MAPQ** | Mapping quality |
 | **MD5 / SHA-256** | File fingerprints (checksums) used to detect any change |
-| **Metaboliser status** | How quickly your enzymes process certain drugs |
+| **Metaboliser phenotype (metaboliser status)** | How quickly your version of an enzyme processes drugs: poor, intermediate, normal, rapid or ultrarapid |
 | **Missense / nonsense / synonymous** | Changes one amino acid / creates a stop / no amino-acid change |
 | **Mitochondrial inheritance (MT)** | Passed down only from the mother, through the mitochondria's own small genome |
-| **Mondo** | Disease ontology that unifies disease names and IDs from OMIM, Orphanet and others |
 | **MNV** | Multi-nucleotide variant |
+| **Mondo** | Disease ontology that unifies disease names and IDs from OMIM, Orphanet and others |
 | **Monogenic / polygenic** | Caused by one gene / by many genes together |
-| **Multifactorial** | Caused by many genes plus environment together, rather than one gene |
 | **Multiallelic** | A site with more than one ALT allele |
+| **Multifactorial** | Caused by many genes plus environment together, rather than one gene |
 | **N** | An unknown or masked base |
 | **NMD** | Nonsense-mediated decay: the cell destroys messages with an early stop, so no faulty protein is made |
 | **NoCall / RefCall / PASS** | DeepVariant filter labels: undecided / matches reference / confident variant |
 | **Odds ratio (OR)** | Relative risk measure from case–control studies |
+| **Outside call** | A genotype worked out by a specialist tool (Cyrius, T1K) and handed to PharmCAT instead of being read from the VCF |
 | **Paired-end** | Both ends of each DNA fragment are sequenced |
 | **PAR** | Pseudoautosomal region (shared tips of X and Y) |
 | **Parquet** | An open columnar file format for fast analytics |
 | **Penetrance / expressivity** | Chance a variant causes disease / how severe it is |
 | **Percentile** | Your position relative to a reference population (50th = middle) |
+| **PharmCAT / ClinPGx** | Pharmacogenomics calling tool / knowledge base |
+| **PharmVar** | The official catalogue of pharmacogene star alleles and the variants that define them |
 | **Phasing** | Knowing which variants are on the same chromosome copy |
 | **Phred score (Q)** | Quality on a log scale: Q30 = 1 in 1,000 error |
-| **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
 | **Pileup** | The stack of reads over a position |
-| **PharmCAT / ClinPGx** | Pharmacogenomics calling tool / knowledge base |
-| **PRS / PGS (Polygenic risk score)** | A score adding up the small effects of many variants into one number, usually shown as a percentile |
-| **Predicted (computer prediction)** | A variant flagged by AI/statistical tools but never classified by a lab; always graded Limited here |
+| **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
 | **Precision / recall / F1** | Benchmark accuracy measures |
-| **REVEL** | A score (0–1) combining 13 prediction tools for missense variants; ClinGen thresholds: 0.644 supporting, 0.773 moderate, 0.932 strong evidence of harm |
-| **Reclassification** | A lab or expert panel changing a variant's ClinVar classification as evidence accumulates |
-| **Read** | One sequenced DNA fragment (150 letters here) |
-| **REF** | The reference allele |
-| **Review stars** | ClinVar's 0–4★ measure of how well-supported a classification is |
-| **Reference genome** | The standard map that genomes are compared to |
-| **Majority allele / reference-minor site** | A spot where the reference genome happens to carry the *rarer* version, so the "variant" listed is actually what most people have. Example: the GRCh37 reference carries Factor V Leiden (rs6025); most people, and a "two copies" result, have the normal version |
+| **Predicted (computer prediction)** | A variant flagged by AI/statistical tools but never classified by a lab; always graded Limited here |
+| **Prodrug (pro-drug)** | A medicine that does nothing until an enzyme converts it into its active form (codeine → morphine, clopidogrel) |
+| **PRS / PGS (Polygenic risk score)** | A score adding up the small effects of many variants into one number, usually shown as a percentile |
+| **Pseudogene** | A broken, near-identical copy of a gene (e.g. *CYP2D7* next to *CYP2D6*) that confuses short-read sequencing |
 | **rCRS** | Reference mitochondrial sequence |
+| **Read** | One sequenced DNA fragment (150 letters here) |
+| **Reclassification** | A lab or expert panel changing a variant's ClinVar classification as evidence accumulates |
+| **Reference genome** | The standard map that genomes are compared to |
+| **REF** | The reference allele |
+| **REVEL** | A score (0–1) combining 13 prediction tools for missense variants; ClinGen thresholds: 0.644 supporting, 0.773 moderate, 0.932 strong evidence of harm |
+| **Review stars** | ClinVar's 0–4★ measure of how well-supported a classification is |
 | **Secondary findings** | Medically actionable results looked for deliberately, beyond the reason a genome was sequenced (see ACMG SF) |
 | **Semi-dominant (SD)** | One copy causes a milder form, two copies a more severe form |
-| **Sporadic** | Usually occurs without being inherited (a new change in that person) |
-| **Splice site** | The boundary of an exon, where RNA is cut and joined; variants here can scramble the protein |
-| **Star allele (`*`)** | Named haplotype of a pharmacogene |
 | **SNP / SNV** | Single-letter variant (SNP usually means a common one) |
+| **Splice site** | The boundary of an exon, where RNA is cut and joined; variants here can scramble the protein |
+| **Sporadic** | Usually occurs without being inherited (a new change in that person) |
+| **Star allele (`*`)** | Named haplotype of a pharmacogene |
 | **Structural variant (SV)** | Large rearrangement (≥ 50 bp) |
+| **T1K** | Open tool that types HLA (and other highly variable) genes from sequencing reads |
 | **Ti/Tv** | Transition-to-transversion ratio (QC metric) |
 | **Transition / transversion** | A↔G or C↔T / all other single-letter swaps |
-| **VAF** | Variant allele fraction: share of reads showing the variant |
 | **UTR** | Untranslated region: the start (5′) and end (3′) of a gene's message that isn't turned into protein |
-| **X-linked (XL / XLR / XLD)** | Gene on the X chromosome. Recessive (XLR): XY people are affected with one copy, XX people are usually carriers. Dominant (XLD): one copy can affect anyone |
-| **Y-linked** | Gene on the Y chromosome, passed father to son |
+| **VAF** | Variant allele fraction: share of reads showing the variant |
 | **Variant** | A position where your DNA differs from the reference genome — usually harmless, everyone has ~4–5 million |
 | **VCF** | Variant Call Format: the standard variant file |
 | **VUS** | Variant of uncertain significance |
 | **WGS** | Whole-genome sequencing |
-| **1000 Genomes** | Public reference panel of 2,504 people from 26 populations across 5 continents |
+| **X-linked (XL / XLR / XLD)** | Gene on the X chromosome. Recessive (XLR): XY people are affected with one copy, XX people are usually carriers. Dominant (XLD): one copy can affect anyone |
+| **Y-linked** | Gene on the Y chromosome, passed father to son |
 | **Zygosity** | Whether you carry 0, 1 or 2 copies of an allele |

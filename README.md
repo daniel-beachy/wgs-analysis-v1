@@ -91,6 +91,8 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [1000 Genomes](https://www.internationalgenome.org/) | Population frequency fallback | Open (Fort Lauderdale) |
 | [AlphaMissense](https://github.com/google-deepmind/alphamissense) | Missense damage prediction | CC BY-NC-SA 4.0 (personal, non-commercial use) |
 | [REVEL](https://sites.google.com/site/revelgenomics/) | Missense damage prediction | Free for non-commercial use |
+| [PharmCAT](https://pharmcat.clinpgx.org/) 3.4 (CPIC, DPWG and FDA guidance via [ClinPGx](https://www.clinpgx.org/)) | Star-allele calling and prescribing guidelines | MPL-2.0 tool; ClinPGx data CC BY-SA 4.0 |
+| [IPD-IMGT/HLA](https://www.ebi.ac.uk/ipd/imgt/hla/) | HLA allele sequences for T1K | CC BY-ND 4.0 |
 
 AlphaMissense and REVEL are licensed for non-commercial use, which this personal project is. The downloaded files stay in `wgs-data/knowledge/` and are never committed to the repo.
 
@@ -116,5 +118,9 @@ As a negative control, changing a single base made decoding fail. The optional o
 ## Graceful degradation
 
 Each dashboard section declares the inputs it **requires** and the inputs that **enhance** it. With only a raw genotype file you still get traits and ancestry. With a VCF you get everything except read-based checks. With CRAM plus a matching reference you also get coverage, callability and CYP2D6 structural calls. Outputs from optional external tools (PharmCAT, Cyrius, hap.py/vcfeval, pgsc_calc, Haplogrep, yhaplo, mosdepth, ...) are ingested when present but never required.
+
+### Medicines (pharmacogenomics)
+
+`wgs run` includes three stages: `cyp2d6` (Cyrius, about 20 minutes, from the CRAM), `hla` (T1K, a few minutes) and `pgx` (PharmCAT, about 2 minutes). Cyrius needs its own Python environment, installed once with `pixi install -e cyrius`. T1K is installed for Apple Silicon only. On other machines, run [Cyrius](https://github.com/Illumina/Cyrius) or [T1K](https://github.com/mourisl/T1K) yourself and put the outputs (a Cyrius `.tsv` with "cyrius" or "cyp2d6" in its name; T1K's `*_genotype.tsv`) in the WGS folder; they are picked up automatically. Without either, PharmCAT still runs and reports *CYP2D6*/HLA as not typed. Design: [ADR-015](docs/DECISIONS.md).
 
 See [docs/DECISIONS.md](docs/DECISIONS.md) for why things are built this way.

@@ -87,6 +87,14 @@ class Store:
         p = self.root / cur["tables"][name]["path"]
         return p if p.exists() else None
 
+    def file(self, source_id: str, name: str) -> Path | None:
+        """A non-table file stored alongside a source's current version (e.g. PharmCAT's jar)."""
+        cur = self.current(source_id)
+        if not cur:
+            return None
+        p = self.root / source_id / cur["version"] / name
+        return p if p.exists() else None
+
     def versions(self) -> dict[str, str]:
         """{source: current version} — recorded in every release so results are traceable."""
         return {k: v["current"] for k, v in self.index()["sources"].items() if v.get("current")}

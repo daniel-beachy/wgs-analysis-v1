@@ -166,6 +166,10 @@ func dataHandler(root string) http.Handler {
 		if strings.HasSuffix(p, ".json") {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-cache")
+		} else if strings.HasSuffix(p, ".html") {
+			// Tool reports (e.g. PharmCAT) opened in their own tab; content-addressed like other objects.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Content-Type", "application/octet-stream")
 			// Objects are content-addressed and never change.

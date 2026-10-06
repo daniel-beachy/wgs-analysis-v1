@@ -53,7 +53,7 @@ def write_json(path: Path, obj) -> None:
 
 
 def run(cmd: list[str] | str, *, log: Path | None = None, check: bool = True, capture: bool = False,
-        shell: bool = False, env: dict | None = None) -> subprocess.CompletedProcess:
+        shell: bool = False, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
     pretty = cmd if isinstance(cmd, str) else shlex.join(str(c) for c in cmd)
     console.print(f"[dim]$ {pretty}[/]")
     if log:
@@ -62,11 +62,11 @@ def run(cmd: list[str] | str, *, log: Path | None = None, check: bool = True, ca
             fh.write(f"\n[{now()}] $ {pretty}\n")
     full_env = {**os.environ, **(env or {})}
     if capture:
-        res = subprocess.run(cmd, shell=shell, capture_output=True, text=True, env=full_env)
+        res = subprocess.run(cmd, shell=shell, capture_output=True, text=True, env=full_env, cwd=cwd)
     else:
         with open(log, "a") if log else open(os.devnull, "w") as fh:
             res = subprocess.run(cmd, shell=shell, stdout=subprocess.PIPE if capture else fh, stderr=fh, text=True,
-                                 env=full_env)
+                                 env=full_env, cwd=cwd)
     if check and res.returncode != 0:
         tail = ""
         if log and log.exists():

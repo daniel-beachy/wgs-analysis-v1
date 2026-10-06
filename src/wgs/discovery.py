@@ -28,6 +28,7 @@ MAX_DEPTH = 6
 EXTERNAL_PATTERNS: dict[str, list[str]] = {
     "pharmcat": [r".*\.report\.json$", r".*\.phenotype\.json$", r".*\.match\.json$"],
     "cyrius": [r".*cyrius.*\.tsv$", r".*cyp2d6.*\.tsv$"],
+    "t1k": [r".*_genotype\.tsv$"],
     "mosdepth": [r".*\.mosdepth\.summary\.txt$", r".*\.mosdepth\.global\.dist\.txt$"],
     "happy": [r".*\.summary\.csv$", r".*\.extended\.csv$"],
     "vcfeval": [r".*vcfeval.*summary\.txt$", r".*/summary\.txt$"],

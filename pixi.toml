@@ -30,6 +30,27 @@ slivar = ">=0.3.3"
 [pypi-dependencies]
 wgs = { path = ".", editable = true }
 
+# T1K (HLA typing): the bioconda builds for Intel Mac and Linux don't solve with
+# this environment, so it is installed on Apple Silicon only. Elsewhere HLA calls
+# are skipped, or read from T1K output produced separately.
+[target.osx-arm64.dependencies]
+t1k = ">=1.0.10,<2"
+
+# Cyrius (CYP2D6 caller) lives in its own environment: it is pip-only and would
+# otherwise pull a second, pip-built copy of pysam over the conda one.
+[feature.cyrius.dependencies]
+python = "3.12.*"
+pysam = ">=0.22"
+scipy = ">=1.11"
+statsmodels = ">=0.14"
+numpy = ">=1.26"
+
+[feature.cyrius.pypi-dependencies]
+cyrius = ">=1.1.1, <2"
+
+[environments]
+cyrius = { features = ["cyrius"], no-default-feature = true }
+
 [tasks]
 wgs = "python -m wgs"
 doctor = "python -m wgs doctor"

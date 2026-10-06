@@ -76,12 +76,16 @@ SELECT * FROM doc_changes;
 | `coverage_bins` | mean read depth in a 100 kb bin | |
 | `acmg_genes` | one ACMG secondary-findings gene (v3.3, 84 genes) | `callable_fraction` = how much of the gene was readable |
 | `genes` | one Ensembl gene (GRCh37) | coordinates for gene lookups |
+| `pgx_genes` | one pharmacogene result (PharmCAT + Cyrius/T1K outside calls) | `diplotype`, `phenotype`, `activity_score`, `call_source`, missing positions, grades |
+| `pgx_drugs` | one guideline row for a drug (CPIC / DPWG / FDA) | `action` = guidance differs from standard; `recommendation` is HTML; FDA rows are ungraded |
+| `pgx_positions` | one PharmCAT defining position, lifted to GRCh38 | `status`: reference / variant / not_callable / low_quality / no_call |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 
 ### Key `claims` columns
 
-- `section` (`health`, `carrier`, `pgx`, `traits`), `group` (e.g. `monogenic`, `predicted`, `uncertain`, `risk`, `carrier`, `drug_response`, `association`).
+- `section` (`health`, `carrier`, `pgx`, `traits`), `group` (e.g. `monogenic`, `predicted`, `uncertain`, `risk`, `carrier`, `drug_response`, `association`, and for pgx `pgx_gene` / `pgx_drug`).
+- Medicines: prefer `pgx_genes`/`pgx_drugs` (or `pgx_*` claims) over single-variant ClinVar `drug_response` claims. Never suggest changing a medication; say "discuss with your prescriber or pharmacist".
 - `category` / `category_label`: what kind of evidence (`pathogenic`, `likely_pathogenic`, `conflicting`, `predicted`, `risk_factor`, `protective`, `drug_response`, `association`).
 - `role`: `carrier`, `affected`, `possible`, `unknown` — only for disease-like claims; `role_reason` explains it.
 - `copies`, `zygosity`, `genotype`, `inheritance`, `inheritance_basis`.
