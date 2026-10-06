@@ -8,6 +8,7 @@
   import Sql from './sections/Sql.svelte';
   import Learn from './sections/Learn.svelte';
   import Upcoming from './sections/Upcoming.svelte';
+  import Changes from './sections/Changes.svelte';
 
   const PORTFOLIO = 'https://daniel-beachy.github.io';
   let theme = $state(localStorage.getItem('theme') ?? 'dark');
@@ -62,10 +63,11 @@
     <p class="muted">Loading your genome…</p>
   {:else if def.id === 'overview'}<Overview {m} index={index!} />
   {:else if def.id === 'qc'}<QC {m} />
+  {:else if def.id === 'changes'}<Changes {m} index={index!} />
   {:else if def.id === 'variants'}<Variants {m} {sex} />
   {:else if def.id === 'sql'}<Sql {m} />
   {:else if def.id === 'learn'}<Learn {theme} />
-  {:else}<Upcoming {def} status={sections.find((x) => x.id === (def.module ?? def.id))} />
+  {:else}<Upcoming {def} {m} status={sections.find((x) => x.id === (def.module ?? def.id))} />
   {/if}
 </main>
 

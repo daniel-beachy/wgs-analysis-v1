@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import coverage, genotypes, publish, qc, reads, reference, variants
+from . import annotate, coverage, genotypes, publish, qc, reads, reference, variants
 
 STAGES = [
     variants.STAGE,
@@ -13,5 +13,6 @@ STAGES = [
     coverage.STAGE,
     reference.FULL,
     qc.STAGE,
+    annotate.STAGE,
     publish.STAGE,
 ]

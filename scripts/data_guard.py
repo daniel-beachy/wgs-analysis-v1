@@ -3,7 +3,7 @@
 
 Checks staged files (or every tracked file with --all) for:
   * genomic file types (VCF/BAM/CRAM/FASTQ/FASTA/Parquet/DuckDB/...)
-  * files larger than 2 MB
+  * files larger than 2 MB (except vendored WebAssembly modules under viewer/public/duckdb-ext/)
   * genotype-looking rows (rsID or chrom/pos followed by a genotype)
   * any string listed in [guard].forbidden_strings of wgs.local.toml (e.g. your kit ID)
 Synthetic test fixtures under tests/fixtures may opt out with a first line containing
@@ -23,6 +23,7 @@ BLOCKED = re.compile(r"\.(vcf|bcf|tbi|csi|cram|crai|bam|bai|fq|fastq|fa|fasta|fa
 GENOTYPE_ROW = re.compile(r"^(rs\d+|chr[\dXYM]+)[\t,;](\w+)?[\t,;]?\d{3,}[\t,;]([ACGT]{1,2}|[01][/|][01])\s*$",
                           re.M)
 MAX_BYTES = 2 * 1024 * 1024
+VENDORED_WASM = "viewer/public/duckdb-ext/"
 
 
 def forbidden_strings() -> list[str]:
@@ -53,6 +54,8 @@ def main() -> int:
             problems.append(f"{f}: genomic file type")
             continue
         data = blob(f, all_files)
+        if f.startswith(VENDORED_WASM) and f.endswith(".wasm") and data[:4] == b"\0asm":
+            continue
         if len(data) > MAX_BYTES:
             problems.append(f"{f}: larger than 2 MB")
             continue

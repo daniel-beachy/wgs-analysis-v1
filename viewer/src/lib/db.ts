@@ -13,7 +13,15 @@ async function init(): Promise<duckdb.AsyncDuckDB> {
   const worker = new Worker(eh_worker, { type: 'classic' });
   const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
   await db.instantiate(eh_wasm);
-  await db.open({ query: { castBigIntToDouble: true } });
+  // forceFullHTTPReads defaults to on in this build; without these flags every Parquet file is downloaded whole.
+  await db.open({
+    query: { castBigIntToDouble: true },
+    filesystem: { forceFullHTTPReads: false, reliableHeadRequests: true, allowFullHTTPReads: true },
+  });
+  // Load the Parquet extension from the bundled copy (public/duckdb-ext) so the dashboard works offline.
+  const c = await db.connect();
+  await c.query(`SET custom_extension_repository = '${new URL('./duckdb-ext', document.baseURI).href}'`);
+  await c.close();
   return db;
 }
 
@@ -28,9 +36,7 @@ export async function useRelease(m: Manifest): Promise<void> {
   const d = await db();
   conn ??= await d.connect();
   for (const name of Object.keys(m.tables)) {
-    const file = `${m.id}_${name}.parquet`;
-    await d.registerFileURL(file, tableUrl(m, name)!, duckdb.DuckDBDataProtocol.HTTP, false);
-    await conn.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet('${file}')`);
+    await conn.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet('${tableUrl(m, name)!}')`);
   }
   registered = m.id;
 }

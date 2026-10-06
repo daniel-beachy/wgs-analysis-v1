@@ -8,11 +8,11 @@
   import Term from '../components/Term.svelte';
 
   let { m, index }: { m: Manifest; index: Index } = $props();
-  const load = $derived(Promise.all([loadDoc(m, 'qc'), loadDoc(m, 'sections'), loadDoc(m, 'coverage')]));
+  const load = $derived(Promise.all([loadDoc(m, 'qc'), loadDoc(m, 'sections'), loadDoc(m, 'coverage'), loadDoc(m, 'knowledge'), loadDoc(m, 'annotate')]));
   const tiles = SECTION_DEFS.filter((s) => s.id !== 'overview');
 </script>
 
-{#await load then [qc, sections, cov]}
+{#await load then [qc, sections, cov, know, ann]}
   {@const checks = qc?.assessment ?? []}
   {@const passed = checks.filter((c: any) => c.status === 'pass').length}
   <div class="grid">
@@ -50,7 +50,7 @@
     </div>
 
     <div class="grid cols-2">
-      <Card title="How confident is each claim?" subtitle="Every finding will carry an evidence grade (built in Step 3).">
+      <Card title="How confident is each claim?" subtitle="Every finding carries two grades — how strong the science is, and how sure we are of your genotype. The overall grade is the weaker of the two.">
         <table class="small">
           <tbody>
             <tr><td><span class="pill pass">Strong</span></td><td>Expert-reviewed, replicated, and your genotype is confidently called.</td></tr>
@@ -59,20 +59,45 @@
             <tr><td><span class="pill fail">Not callable</span></td><td>Your data can’t answer this position (low coverage), so no claim is made.</td></tr>
           </tbody>
         </table>
+        <button class="link small" onclick={() => go('learn', 'how-this-project-grades-its-confidence')}>How the grading works →</button>
         <p class="small faint">This is a personal learning tool, not a medical test. Anything health-related should be confirmed by a clinician with a clinical-grade test.</p>
       </Card>
       <Card title="Releases" subtitle="Each analysis run is saved as a dated, read-only release, so results can be compared over time.">
         <table class="small">
-          <thead><tr><th>Release</th><th>Created</th><th class="num">Variants</th></tr></thead>
+          <thead><tr><th>Release</th><th>Created</th><th>What changed</th></tr></thead>
           <tbody>
             {#each index.releases.filter((r) => r.sample === m.sample) as r}
-              <tr><td class="mono">{r.id}{r.id === m.id ? ' ●' : ''}</td><td>{dateTime(r.created)}</td><td class="num">{r.id === m.id ? int(m.tables.variants?.rows) : ''}</td></tr>
+              <tr><td class="mono">{r.id}{r.id === m.id ? ' ●' : ''}</td><td>{dateTime(r.created)}</td><td class="small muted">{r.summary ?? ''}</td></tr>
             {/each}
           </tbody>
         </table>
-        <p class="small faint">Pipeline v{m.pipeline_version}. The “What changed” view arrives with the knowledge layer.</p>
+        <p class="small faint">Pipeline v{m.pipeline_version}. <button class="link" onclick={() => go('changes')}>See what changed →</button></p>
       </Card>
     </div>
+
+    {#if know?.sources}
+      <Card title="Where the knowledge comes from" subtitle="Public databases, downloaded and joined to your variants on this computer — your genome is never sent anywhere. Refresh with `wgs knowledge refresh`.">
+        {#if ann}
+          <div class="row small muted annstats">
+            <span><strong>{int(ann.alleles)}</strong> variant alleles annotated</span>
+            <span><strong>{int(ann.high_impact)}</strong> high-impact</span>
+            <span><strong>{int(ann.in_clinvar)}</strong> in ClinVar</span>
+            <span><strong>{int(ann.claims)}</strong> graded findings</span>
+          </div>
+        {/if}
+        <table class="small">
+          <thead><tr><th>Source</th><th>Version used</th><th>What it adds</th><th>Updates</th><th>Licence</th></tr></thead>
+          <tbody>
+            {#each Object.entries(know.sources) as [id, s]}
+              {@const src = s as any}
+              <tr><td><a href={src.homepage} target="_blank" rel="noreferrer">{src.title ?? id}</a></td><td class="mono">{src.version}</td>
+                <td class="muted">{src.description}</td><td class="muted">{src.cadence}</td><td class="faint">{src.licence}</td></tr>
+            {/each}
+            <tr><td>Evidence model</td><td class="mono">v{know.evidence_model}</td><td class="muted">The grading rules themselves (ADR-013). Changing them is tracked like a data update.</td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </Card>
+    {/if}
   </div>
 {/await}
 
@@ -88,4 +113,6 @@
   .tile:hover { border-color: var(--accent); transform: translateY(-1px); }
   .tile p { margin: 6px 0 0; }
   .ti { font-size: 1.2rem; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); }
+  .annstats { gap: 18px; margin-bottom: 8px; }
 </style>

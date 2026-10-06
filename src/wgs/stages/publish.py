@@ -28,9 +28,12 @@ from pathlib import Path
 import duckdb
 
 from .. import __version__
+from .. import evidence as ev
+from ..diff import diff, summarise
+from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, write_json
-from . import coverage, genotypes, qc, reads, reference, variants
+from . import annotate, coverage, genotypes, qc, reads, reference, variants
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -100,6 +103,26 @@ def _callable_sql(ctx: Context) -> str:
            f"ORDER BY chrom_order, start"
 
 
+def _annotations_sql(ctx: Context) -> str:
+    return f"SELECT * FROM '{annotate.annotations_path(ctx)}' ORDER BY chrom_order, pos, alt"
+
+
+def _claims_sql(ctx: Context) -> str:
+    return f"SELECT * FROM '{annotate.claims_path(ctx)}' ORDER BY section, claim_id"
+
+
+def _genes_in(ctx: Context) -> list[Path]:
+    if not annotate.annotations_path(ctx).exists():
+        return []
+    p = Store(ctx.cfg).table("ensembl", "genes")
+    return [p] if p else []
+
+
+def _genes_sql(ctx: Context) -> str:
+    return (f"SELECT symbol, gene_id, chrom, start, \"end\", strand, biotype, description "
+            f"FROM '{_genes_in(ctx)[0]}' WHERE symbol IS NOT NULL ORDER BY symbol")
+
+
 TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context], str], str]] = [
     # name, transform version, inputs, sql, description
     ("variants", "1", lambda c: [variants.variants_parquet(c)] + ([genotypes.out_path(c)]
@@ -111,6 +134,11 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      f"Mean read depth in {BIN_BP // 1000} kb bins along every chromosome"),
     ("callable", "1", lambda c: [coverage.out_dir(c) / "callable.parquet"], _callable_sql,
      "Genome partitioned into CALLABLE / LOW / NO_COVERAGE intervals"),
+    ("annotations", "1", lambda c: [annotate.annotations_path(c)], _annotations_sql,
+     "Your variant alleles with gene effect (Ensembl/bcftools csq), ClinVar, 1000 Genomes and gnomAD frequencies"),
+    ("claims", "1", lambda c: [annotate.claims_path(c)], _claims_sql,
+     "Graded statements about your genotypes: evidence strength, call confidence, reasons and sources"),
+    ("genes", "1", _genes_in, _genes_sql, "Ensembl gene coordinates (GRCh37) for searching by gene name"),
 ]
 
 
@@ -121,6 +149,7 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "alignment_stats": reads.aln_out(ctx),
         "fastq_stats": reads.fq_out(ctx),
         "reference_full": reference.full_decode_file(ctx),
+        "annotate": annotate.summary_path(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 
@@ -129,6 +158,26 @@ def _inventory(ctx: Context) -> dict:
     files = [{"kind": f.kind, "name": f.path.name, "size": f.size,
               "folder": f.path.parent.name} for f in ctx.inv.files if f.kind not in ("index", "bed")]
     return {"sample": ctx.sample, "files": files, "warnings": ctx.inv.warnings}
+
+
+def _knowledge(ctx: Context, annotated: bool) -> dict:
+    """Versions of every knowledge source used (only if the release actually contains annotations)."""
+    if not annotated:
+        return {"versions": {}, "evidence_model": None, "sources": {}}
+    summary = json.loads(annotate.summary_path(ctx).read_text())
+    used = summary.get("knowledge", {})
+    idx = Store(ctx.cfg).index()["sources"]
+    sources = {}
+    for sid, ver in used.items():
+        s = idx.get(sid, {})
+        v = next((x for x in s.get("versions", []) if x["version"] == ver), {})
+        sources[sid] = {"title": s.get("title"), "homepage": s.get("homepage"), "licence": s.get("licence"),
+                        "cadence": s.get("cadence"), "description": s.get("description"), "version": ver,
+                        "built": v.get("built"),
+                        "upstream": [{"url": u["url"], "last_modified": u.get("last_modified")}
+                                     for u in v.get("upstream", [])]}
+    return {"versions": used, "evidence_model": summary.get("evidence_model", ev.MODEL_VERSION),
+            "sources": sources}
 
 
 def _put_object(rd: Path, name: str, key: str, ext: str, make: Callable[[Path], None]) -> dict:
@@ -178,8 +227,14 @@ def build(ctx: Context) -> dict:
         text = json.dumps(payload, indent=1, default=str)
         documents[name] = _put_object(rd, name, _key(name, text), "json", lambda dest, t=text: dest.write_text(t))
 
+    knowledge = _knowledge(ctx, "annotations" in tables)
+    if knowledge["sources"]:
+        text = json.dumps(knowledge, indent=1)
+        documents["knowledge"] = _put_object(rd, "knowledge", _key("knowledge", text), "json",
+                                             lambda dest, t=text: dest.write_text(t))
     content = {"schema": SCHEMA, "sample": ctx.sample, "pipeline_version": __version__,
-               "tables": tables, "documents": documents, "knowledge": {}}
+               "tables": tables, "documents": documents,
+               "knowledge": {"versions": knowledge["versions"], "evidence_model": knowledge["evidence_model"]}}
     digest = _key(json.dumps(content, sort_keys=True))
 
     idx_file = index_path(ctx)
@@ -187,6 +242,15 @@ def build(ctx: Context) -> dict:
     latest = next((r for r in index["releases"] if r["sample"] == ctx.sample), None)
     if latest and latest.get("digest") == digest:
         return {"release": latest["id"], "new": False}
+
+    # "What changed" is computed against the previous release, after the digest so it never causes a release.
+    prev = json.loads((rd / latest["manifest"]).read_text()) if latest else None
+    changes = diff(prev, rd, {k: rd / v["path"] for k, v in tables.items()}, content["knowledge"]["versions"],
+                   content["knowledge"]["evidence_model"])
+    changes["summary"] = summarise(changes)
+    text = json.dumps(changes, indent=1, default=str)
+    documents["changes"] = _put_object(rd, "changes", _key("changes", text), "json",
+                                       lambda dest, t=text: dest.write_text(t))
 
     created = datetime.now(UTC)
     rid = created.strftime("%Y-%m-%d_%H%M%S")
@@ -197,7 +261,8 @@ def build(ctx: Context) -> dict:
     write_json(rd / rid / "manifest.json", manifest)
     index["releases"].insert(0, {"id": rid, "sample": ctx.sample, "created": manifest["created"],
                                  "digest": digest, "manifest": f"{rid}/manifest.json",
-                                 "previous": manifest["previous"]})
+                                 "previous": manifest["previous"], "knowledge": content["knowledge"]["versions"],
+                                 "summary": changes["summary"]})
     index["latest"] = rid
     write_json(idx_file, index)
     return {"release": rid, "new": True, "tables": {k: v["rows"] for k, v in tables.items()}}
@@ -210,7 +275,7 @@ def _available(ctx: Context) -> str | None:
 
 STAGE = Stage(
     name="publish",
-    version="1",
+    version="2",
     title="Publish a dashboard release",
     fn=build,
     inputs=_input_paths,

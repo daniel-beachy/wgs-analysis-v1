@@ -2,8 +2,17 @@
   import type { SectionDef } from '../lib/sections';
   import { sectionFor } from '../lib/learn';
   import { go } from '../lib/router.svelte';
+  import type { Manifest } from '../lib/data';
   import Card from '../components/Card.svelte';
-  let { def, status }: { def: SectionDef; status?: { status: string; detail: string; note: string } } = $props();
+  import ClaimList from '../components/ClaimList.svelte';
+  let { def, status, m }: { def: SectionDef; status?: { status: string; detail: string; note: string }; m?: Manifest } = $props();
+  const CLAIM_INTRO: Record<string, string> = {
+    health: 'Your variants that ClinVar links to a disease or risk, graded by how strong that link is and how confidently your genotype was called. Most are risk factors with small effects; pathogenic entries are rarer and deserve clinical confirmation.',
+    carrier: 'Variants in genes where disease needs two altered copies, and you have one. Usually no effect on you; relevant for family planning.',
+    pgx: 'Variants ClinVar records as affecting a drug response. Full medicine-by-medicine guidance (CPIC/DPWG, star alleles) arrives in Step 5; until then, ClinVar entries are capped at Moderate.',
+    traits: 'Variants ClinVar records as associated with a trait. Curated trait panels and polygenic scores arrive in Step 6; until then these are mostly Limited.',
+  };
+  const early = $derived(!!m?.tables.claims && def.module != null && def.module in CLAIM_INTRO);
   const learnSlug = $derived(def.learn ? sectionFor(def.learn) : undefined);
   // detail format from the capability model: "+ extra a; extra b | - missing kind (why); kind (why)"
   const parts = $derived.by(() => {
@@ -17,6 +26,15 @@
   });
 </script>
 
+{#if early && m}
+  <div class="grid">
+    <div class="banner small"><span class="bi">{def.icon}</span><div><strong>{def.title}</strong> — {def.blurb}<br /><span class="faint">Early view: graded ClinVar findings. The full section arrives in step {def.step}{def.evidence ? `, built on ${def.evidence}` : ''}</span></div>
+      {#if learnSlug}<button onclick={() => go('learn', learnSlug)}>📖 Background</button>{/if}</div>
+    <Card title="Graded findings" subtitle="From ClinVar, joined to your variants locally. Click a row for the reasons and sources.">
+      <ClaimList {m} section={def.module!} intro={CLAIM_INTRO[def.module!]} />
+    </Card>
+  </div>
+{:else}
 <Card>
   <div class="up">
     <div class="icon">{def.icon}</div>
@@ -37,8 +55,12 @@
     {#if learnSlug}<button onclick={() => go('learn', learnSlug)}>📖 Read the background while you wait</button>{/if}
   </div>
 </Card>
+{/if}
 
 <style>
+  .banner { display: flex; gap: 14px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; }
+  .banner > div { flex: 1; }
+  .bi { font-size: 1.8rem; }
   .up { text-align: center; padding: 30px 10px; max-width: 720px; margin: 0 auto; }
   .icon { font-size: 3rem; }
   .lead { margin: 0 auto 1em; }

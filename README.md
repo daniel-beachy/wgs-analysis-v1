@@ -52,6 +52,19 @@ pixi run wgs run --force coverage # recompute one stage
 
 Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth), `qc` and `publish`. Working files go to `wgs-data/work/<sample>/`. `publish` then writes a dated, read-only **release** to `wgs-data/releases/` — that is all the dashboard reads.
 
+## Keeping the knowledge current
+
+Interpretation uses public databases downloaded to `wgs-data/knowledge/`. Your variants are never sent online ([ADR-012](docs/DECISIONS.md)).
+
+```bash
+pixi run wgs knowledge status                 # which versions you have and when they were checked
+pixi run wgs knowledge refresh                # download only sources that changed upstream (about 4 GB the first time)
+pixi run wgs knowledge refresh --source clinvar --pin clinvar=20251006   # reproduce an archived ClinVar
+pixi run wgs run                              # re-annotate and publish; a new release only if something changed
+```
+
+The dashboard's **What changed** tab then shows which sources moved to a new version, which findings were added, removed or regraded, and every variant whose ClinVar classification changed. A sensible routine is to refresh monthly. Every finding carries an evidence grade and a call-confidence grade, each with reasons ([ADR-013](docs/DECISIONS.md), and the "How this project grades its confidence" section of the [primer](docs/GENETICS_PRIMER.md)).
+
 ## Opening the dashboard (any machine, nothing to install)
 
 Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` folder (`.app` on a Mac, `.exe` on Windows). Your browser opens on a local page (`http://127.0.0.1:8787`); the program quits by itself about a minute after you close the tab. Everything runs on your computer — no internet needed, nothing is uploaded.

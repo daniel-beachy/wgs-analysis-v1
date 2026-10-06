@@ -274,3 +274,52 @@ def run_cmd(
     if failed:
         console.print(f"[red]{len(failed)} stage(s) failed: {', '.join(failed)}. Logs: {ctx.logs}[/]")
         raise typer.Exit(1)
+
+
+knowledge_app = typer.Typer(no_args_is_help=True, help="Public knowledge sources: status and refresh.")
+app.add_typer(knowledge_app, name="knowledge")
+
+
+def _knowledge_scratch() -> Path:
+    import tempfile
+
+    base = Path(os.environ.get("WGS_SCRATCH") or tempfile.gettempdir())
+    p = base / "wgs-scratch"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@knowledge_app.command("status")
+def knowledge_status():
+    """Show which version of each knowledge source is in use and when it was last checked."""
+    from .knowledge import Store
+    from .knowledge.registry import SOURCES
+
+    store = Store(_cfg())
+    idx = store.index()["sources"]
+    t = Table(title="Knowledge sources", show_lines=False)
+    for c in ("source", "current version", "versions kept", "last checked", "tables", "cadence"):
+        t.add_column(c)
+    for src in SOURCES:
+        e = idx.get(src.id, {})
+        cur = store.current(src.id)
+        tables = ", ".join(f"{k} ({v['rows']:,})" for k, v in (cur or {}).get("tables", {}).items())
+        t.add_row(src.title, e.get("current", "[yellow]not downloaded[/]"), str(len(e.get("versions", []))),
+                  (e.get("checked") or "")[:16], tables, src.cadence)
+    console.print(t)
+
+
+@knowledge_app.command("refresh")
+def knowledge_refresh(
+    source: list[str] = typer.Option(None, "--source", help="Only these sources (repeatable)."),
+    pin: list[str] = typer.Option(None, "--pin", help="source=version, e.g. clinvar=20250106 (repeatable)."),
+    force: bool = typer.Option(False, help="Rebuild even if upstream is unchanged."),
+    keep: int = typer.Option(4, help="Versions to keep per source."),
+):
+    """Download new versions of public knowledge. Then `wgs run` re-annotates and records what changed."""
+    from .knowledge import refresh
+
+    pins = dict(p.split("=", 1) for p in (pin or []))
+    res = refresh(_cfg(), _knowledge_scratch(), only=source or None, pin=pins, force=force, keep=keep)
+    if any(v.startswith("failed") for v in res.values()):
+        raise typer.Exit(1)

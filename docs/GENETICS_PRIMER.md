@@ -254,9 +254,22 @@ Benign  ─  Likely benign  ─  VUS (uncertain)  ─  Likely pathogenic  ─  P
 - **ClinVar** is the public database where labs submit classifications. Its **review stars** (0–4) show how well-supported a classification is: 0 = one submitter with no criteria; 2+ = several labs agree; 3–4 = expert panel or practice guideline.
 - **ACMG SF (secondary findings) list:** about 80 genes where a pathogenic variant is medically actionable (e.g. *BRCA1*, *LDLR*, *MYH7*). In the dashboard these are behind a click-to-reveal panel.
 
+### Variant effects: consequence and impact
+
+The tool works out what each variant does to the gene it sits in. It uses Ensembl's gene map and `bcftools csq`, which also handles neighbouring variants that combine into one change. The **consequence** says what kind of change it is, and the **impact** groups consequences by how disruptive they are:
+
+| Impact | Consequences | Meaning |
+|---|---|---|
+| **High** | stop gained, frameshift, splice donor/acceptor, start/stop lost | Probably breaks that copy of the protein (loss of function) |
+| **Moderate** | missense, in-frame insertion/deletion | Changes the protein; the effect may be large or nothing |
+| **Low** | synonymous, splice region | Unlikely to change the protein |
+| **Modifier** | intron, UTR, non-coding gene, intergenic | Outside the protein code; usually no known effect |
+
+Everyone has around 100 high-impact variants. Most are in genes that can tolerate losing one copy. **Impact is not the same as importance**: it describes the mechanism, not whether that matters for health.
+
 ### Population frequency
 
-- **Allele frequency (AF):** how common a variant is in a population database such as **gnomAD** (hundreds of thousands of people). Something carried by 5% of healthy people can't cause a rare severe disease, so frequency is one of the strongest filters.
+- **Allele frequency (AF):** how common a variant is in a population database. This project uses **1000 Genomes** (2,504 people from 26 populations, with a per-continent breakdown) and **gnomAD** (about 140,000 people). gnomAD's **popmax** is the highest frequency in any single population. Something carried by 5% of healthy people can't cause a rare severe disease, so frequency is one of the strongest filters.
 - **Common** ≈ AF > 1%, **rare** < 1%, **ultra-rare/novel** = absent from gnomAD.
 
 ### Risk numbers: relative vs absolute
@@ -280,14 +293,35 @@ Benign  ─  Likely benign  ─  VUS (uncertain)  ─  Likely pathogenic  ─  P
 
 ### How this project grades its confidence
 
-Every claim in the dashboard carries two labels:
+Every claim in the dashboard carries two separate grades, and each grade lists the reasons behind it:
 
-| Label | Asks | Examples |
+| Grade | Asks | Levels |
 |---|---|---|
-| **Evidence strength** | How good is the *science*? | Practice guideline / expert panel → multiple studies → single study → prediction only |
-| **Call confidence** | How sure are we *your genotype* is right? | High depth and GQ, callable region, concordant with TXT → high. Low depth or repetitive region → lower. |
+| **Evidence grade** | How good is the *science* linking this variant to an effect? | Strong · Moderate · Limited |
+| **Call confidence** | How sure are we that *your genotype* is right? | High · Medium · Low · Not callable |
 
-A claim is only as strong as the weaker of the two. Each also shows the database version it came from, so when knowledge is refreshed you can see exactly what changed and why.
+**The overall grade is the weaker of the two.** Strong science about a shaky call is not a strong finding.
+
+How the evidence grade is set for a ClinVar-based claim (evidence model v1):
+
+1. **Start from ClinVar review stars.** 3–4★ (expert panel / practice guideline) → Strong; 2★ (several labs agree) → Moderate; 0–1★ → Limited.
+2. **Cap what ClinVar can't fully support.** Drug-response entries cap at Moderate until checked against CPIC/DPWG guidelines. "Conflicting" entries are always Limited.
+3. **Check population frequency** for disease claims. If over 5% of any population carries the variant, it can't cause a rare severe disease, so the grade drops to Limited (the ACMG "BA1" rule). Over 1% lowers it one step ("BS1").
+4. **Check the gene.** If ClinGen rates the gene–disease link *Disputed* or *Refuted*, the grade drops to Limited. If ClinGen rates it *Limited*, the grade drops one step.
+
+How call confidence is set: DeepVariant must call it PASS. Then a genotype quality (GQ) of at least 30 with at least 15 reads gives High, and a GQ of at least 20 with at least 10 reads gives Medium. A read balance far from what's expected lowers it one step; for one copy, the expected range is 20–80% of reads. Disagreement with the provider's genotype file makes it Low.
+
+**Sensitive findings:** pathogenic results, and results in genes such as *BRCA1/2* or *APOE*, are hidden until you choose to reveal them.
+
+### Keeping results current
+
+Your DNA doesn't change, but knowledge about it does. ClinVar alone is updated weekly, and thousands of variants are **reclassified** every year (most often from "uncertain" to "benign"). So nothing here is a one-off snapshot:
+
+1. **Knowledge sources are versioned.** `wgs knowledge refresh` checks each source (ClinVar, Ensembl genes, ClinGen, 1000 Genomes, gnomAD) for a newer version. It downloads only what changed and keeps the last few versions.
+2. **Each pipeline run is a release** that records exactly which knowledge versions and grading rules it used.
+3. **Each release stores a diff** against the release before it. The *What changed* tab shows sources that moved to a new version, findings added, removed or regraded, and every variant of yours whose ClinVar classification changed.
+
+The joining happens on your own computer. Your variants are never sent to an online service.
 
 ### Accuracy benchmarking (Genome in a Bottle)
 
@@ -315,7 +349,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **ACMG SF** | List of medically actionable genes reported as "secondary findings" |
 | **AD** | Allelic depth: reads supporting each allele |
 | **Admixture** | Estimated mix of ancestral populations |
-| **AF** | Allele frequency in a population |
+| **AF / Allele frequency** | How common a variant is: the share of chromosomes in a population that carry it |
 | **Allele** | One version of a sequence at a position (e.g. A or G) |
 | **Alignment / mapping** | Placing reads at their position on the reference |
 | **ALT** | The non-reference allele |
@@ -325,12 +359,15 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Base / base pair (bp)** | One DNA letter / one letter plus its partner |
 | **bgzip / tabix** | Block compression plus index that allow random access into big text files |
 | **Build** | A version of the reference genome |
+| **Call confidence** | How sure we are that your genotype at a position is right (High / Medium / Low), from read depth, GQ and read balance |
 | **Callable** | A region with enough good-quality reads to trust a genotype, including "matches reference" |
 | **Carrier** | Has one altered copy of a recessive gene |
 | **chrM / mtDNA** | Mitochondrial genome |
 | **ClinVar** | Public database of variant–disease classifications |
 | **CNV** | Copy-number variant |
+| **ClinGen** | Expert consortium rating how strongly each gene is linked to each disease (Definitive → Refuted) |
 | **Concordance** | Agreement between two sets of genotype calls |
+| **Consequence** | What a variant does to a gene: missense, synonymous, frameshift, intron… |
 | **Contig** | A continuous piece of the reference sequence |
 | **Coverage / depth (DP)** | Number of reads over a position |
 | **CPIC / DPWG** | Pharmacogenomic guideline groups (US / Netherlands) |
@@ -338,6 +375,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Diplotype** | Your pair of star alleles for a gene |
 | **dbSNP / rsID** | Catalogue of known variants and their IDs |
 | **Duplicate reads** | PCR copies of the same DNA fragment |
+| **Evidence grade** | How strong the science behind a claim is (Strong / Moderate / Limited), with the reasons listed |
 | **Exon / intron** | Parts of a gene kept in / spliced out of the RNA |
 | **FASTA** | Text format for sequences (used for the reference) |
 | **FASTQ** | Text format for raw reads plus quality scores |
@@ -352,6 +390,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Heteroplasmy** | A mitochondrial variant present in only some mtDNA copies |
 | **Heterozygous / homozygous** | Two different / two identical alleles |
 | **HGVS** | Standard notation for describing variants (`c.` = coding DNA, `p.` = protein) |
+| **Impact** | How disruptive a consequence is: High (likely breaks protein), Moderate, Low, Modifier (non-coding) |
 | **Indel** | Small insertion or deletion |
 | **LoF** | Loss-of-function: variant expected to disable a gene copy |
 | **MAPQ** | Mapping quality |
@@ -362,6 +401,7 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Monogenic / polygenic** | Caused by one gene / by many genes together |
 | **Multiallelic** | A site with more than one ALT allele |
 | **N** | An unknown or masked base |
+| **NMD** | Nonsense-mediated decay: the cell destroys messages with an early stop, so no faulty protein is made |
 | **NoCall / RefCall / PASS** | DeepVariant filter labels: undecided / matches reference / confident variant |
 | **Odds ratio (OR)** | Relative risk measure from case–control studies |
 | **Paired-end** | Both ends of each DNA fragment are sequenced |
@@ -371,22 +411,29 @@ A claim is only as strong as the weaker of the two. Each also shows the database
 | **Percentile** | Your position relative to a reference population (50th = middle) |
 | **Phasing** | Knowing which variants are on the same chromosome copy |
 | **Phred score (Q)** | Quality on a log scale: Q30 = 1 in 1,000 error |
+| **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
 | **Pileup** | The stack of reads over a position |
 | **PharmCAT / ClinPGx** | Pharmacogenomics calling tool / knowledge base |
 | **PRS / PGS** | Polygenic risk (or score) |
 | **Precision / recall / F1** | Benchmark accuracy measures |
+| **Reclassification** | A lab or expert panel changing a variant's ClinVar classification as evidence accumulates |
 | **Read** | One sequenced DNA fragment (150 letters here) |
 | **REF** | The reference allele |
+| **Review stars** | ClinVar's 0–4★ measure of how well-supported a classification is |
 | **Reference genome** | The standard map that genomes are compared to |
+| **Majority allele / reference-minor site** | A spot where the reference genome happens to carry the *rarer* version, so the "variant" listed is actually what most people have. Example: the GRCh37 reference carries Factor V Leiden (rs6025); most people, and a "two copies" result, have the normal version |
 | **rCRS** | Reference mitochondrial sequence |
+| **Splice site** | The boundary of an exon, where RNA is cut and joined; variants here can scramble the protein |
 | **Star allele (`*`)** | Named haplotype of a pharmacogene |
 | **SNP / SNV** | Single-letter variant (SNP usually means a common one) |
 | **Structural variant (SV)** | Large rearrangement (≥ 50 bp) |
 | **Ti/Tv** | Transition-to-transversion ratio (QC metric) |
 | **Transition / transversion** | A↔G or C↔T / all other single-letter swaps |
 | **VAF** | Variant allele fraction: share of reads showing the variant |
+| **UTR** | Untranslated region: the start (5′) and end (3′) of a gene's message that isn't turned into protein |
 | **Variant** | A position where your DNA differs from the reference genome — usually harmless, everyone has ~4–5 million |
 | **VCF** | Variant Call Format: the standard variant file |
 | **VUS** | Variant of uncertain significance |
 | **WGS** | Whole-genome sequencing |
+| **1000 Genomes** | Public reference panel of 2,504 people from 26 populations across 5 continents |
 | **Zygosity** | Whether you carry 0, 1 or 2 copies of an allele |

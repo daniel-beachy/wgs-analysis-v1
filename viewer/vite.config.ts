@@ -24,9 +24,11 @@ function devData(): Plugin {
           res.statusCode = 206;
           res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
           res.setHeader('Content-Length', end - start + 1);
+          if (req.method === 'HEAD') return res.end();
           createReadStream(file, { start, end }).pipe(res);
         } else {
           res.setHeader('Content-Length', size);
+          if (req.method === 'HEAD') return res.end();
           createReadStream(file).pipe(res);
         }
       });

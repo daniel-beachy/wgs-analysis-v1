@@ -1,14 +1,14 @@
 // Release discovery: the launcher serves the workspace `releases/` folder at ./data/.
 
 export interface ObjectRef { path: string; bytes: number; sha256: string; rows?: number; description?: string }
-export interface ReleaseEntry { id: string; sample: string; created: string; digest: string; manifest: string; previous: string | null }
+export interface ReleaseEntry { id: string; sample: string; created: string; digest: string; manifest: string; previous: string | null; summary?: string; knowledge?: Record<string, string> }
 export interface Index { schema: number; releases: ReleaseEntry[]; latest: string }
 export interface Manifest {
   schema: number; id: string; sample: string; created: string; digest: string; previous: string | null;
   pipeline_version: string;
   tables: Record<string, ObjectRef>;
   documents: Record<string, ObjectRef>;
-  knowledge: Record<string, unknown>;
+  knowledge: { versions?: Record<string, string>; evidence_model?: string | null };
 }
 
 export const DATA = new URL('./data/', document.baseURI).href;

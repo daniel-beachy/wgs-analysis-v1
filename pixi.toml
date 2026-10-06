@@ -25,6 +25,7 @@ numpy = ">=2.5.3,<3"
 pandas = ">=3.0.6,<4"
 nodejs = ">=26.10.0,<26.11"
 go = ">=1.27.1,<2"
+slivar = ">=0.3.3"
 
 [pypi-dependencies]
 wgs = { path = ".", editable = true }
