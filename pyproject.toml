@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wgs"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Personal whole-genome analysis pipeline"
+
+[project.scripts]
+wgs = "wgs.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wgs"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# exFAT reports every file as executable, so shebang/executable checks are meaningless here.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "PERF", "PIE"]
+ignore = ["B008", "EXE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

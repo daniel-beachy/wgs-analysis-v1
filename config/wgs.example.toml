@@ -1,0 +1,21 @@
+# Copy to ../wgs.local.toml (or run `pixi run wgs init`). Relative paths resolve against the file's folder.
+[paths]
+workspace = "../wgs-data"
+search = [".."]
+
+[sample]
+id = ""            # only needed when several samples are discovered
+
+[inputs]           # optional explicit overrides; these win over discovery
+# vcf = "../WGS/02_VCF/sample.vcf.gz"
+# cram = "../WGS/04_CRAM/sample.cram"
+# reference = "/path/to/reference.fa"
+
+[external]         # extra folders holding outputs of optional external tools
+dirs = []
+
+[host."my-windows-laptop"]
+search = ["D:/Genomics"]
+
+[guard]
+forbidden_strings = []

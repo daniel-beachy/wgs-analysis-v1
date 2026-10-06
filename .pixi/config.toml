@@ -1,0 +1,3 @@
+# The project lives on an exFAT drive (no hardlinks, 256 KB clusters), and a
+# conda environment is architecture-specific anyway, so keep it on the host disk.
+detached-environments = true

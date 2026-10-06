@@ -1,0 +1,43 @@
+# --- Never commit genomic data or results (also enforced by scripts/hooks/pre-commit) ---
+*.vcf
+*.vcf.gz
+*.vcf.bgz
+*.bcf
+*.tbi
+*.csi
+*.cram
+*.crai
+*.bam
+*.bai
+*.fq
+*.fq.gz
+*.fastq
+*.fastq.gz
+*.fa
+*.fa.gz
+*.fasta
+*.fai
+*.parquet
+*.duckdb
+*.duckdb.wal
+wgs.local.toml
+/data/
+/results/
+/wgs-data/
+
+# --- Build output ---
+/launcher/dist/
+/viewer/dist/
+/viewer/node_modules/
+/viewer/public/duckdb/
+
+# --- Environment / OS noise ---
+.pixi/*
+!.pixi/config.toml
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+._*
+Thumbs.db
