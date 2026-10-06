@@ -16,3 +16,7 @@ Each step ends with a **checkpoint** where Daniel tries the result before we mov
 | 9 | GIAB HG002 benchmark and demo mode | Accuracy numbers |
 | 10 | End-to-end refresh: "What changed" | Simulated knowledge update |
 | 11 | Documentation, Windows test, polish | Final sign-off |
+
+## Future options (not scheduled)
+
+- **Parent of origin ("who gave you what").** Only worthwhile once a parent is tested; a consumer array file (23andMe or AncestryDNA) from one parent is enough. Import it as an optional input and run trio phasing: wherever the parent has only one version, it shows which of your two copies came from them. That labels most variants on chromosomes 1–22 as maternal or paternal, settles cis/trans questions such as the *GALT* pair, and lets the Ancestry section paint each parent's side separately. Without a parent, read-backed phasing (WhatsHap on the CRAM) can only split variants into two unlabelled copies over short stretches.
