@@ -33,13 +33,13 @@ def _alignment(ctx: Context) -> dict:
         region = next((r for r in ("chr20", "20") if r in af.references), af.references[0])
     args = ["samtools", "stats", "-@", "4"]
     if cram.kind == "cram":
-        args += ["-r", str(reference_fasta(ctx))]
+        args += ["-r", str(reference_fasta(ctx)), "--reference", str(reference_fasta(ctx))]
     res = run([*args, str(cram.path), region], capture=True, log=ctx.logs / "reads.log")
     sn, is_hist, rl_hist = {}, [], []
     for line in res.stdout.splitlines():
         parts = line.split("\t")
         if parts[0] == "SN":
-            sn[parts[1].rstrip(":")] = float(parts[2]) if re.match(r"^-?[\d.e+]+$", parts[2]) else parts[2]
+            sn[parts[1].rstrip(":")] = float(parts[2]) if re.match(r"^-?[\d.]+(e[-+]?\d+)?$", parts[2]) else parts[2]
         elif parts[0] == "IS":
             is_hist.append((int(parts[1]), int(parts[2])))
         elif parts[0] == "RL":
@@ -119,7 +119,7 @@ def _aln_available(ctx: Context) -> str | None:
 
 
 ALIGNMENT = Stage(
-    name="alignment_stats", version="1", title="Alignment stats (samtools stats, chr20)", fn=_alignment,
+    name="alignment_stats", version="3", title="Alignment stats (samtools stats, chr20)", fn=_alignment,
     inputs=lambda ctx: [f.path for f in (ctx.inv.of("cram") or ctx.inv.of("bam"))[:1]],
     outputs=lambda ctx: [aln_out(ctx)], available=_aln_available,
 )

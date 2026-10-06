@@ -11,5 +11,6 @@ STAGES = [
     reads.FASTQ,
     reads.ALIGNMENT,
     coverage.STAGE,
+    reference.FULL,
     qc.STAGE,
 ]

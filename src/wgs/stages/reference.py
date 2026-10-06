@@ -208,3 +208,35 @@ STAGE = Stage(
     outputs=lambda ctx: [ready_file(ctx)],
     available=_available,
 )
+
+
+def full_decode_file(ctx: Context) -> Path:
+    return ref_dir(ctx) / "full_decode.json"
+
+
+def _full_decode(ctx: Context) -> dict:
+    """Decode every read in the CRAM once. htslib checks every slice's reference MD5 while doing so, so passing
+    proves the reference is identical wherever any read lies, not just in sampled windows."""
+    cram, fasta = ctx.inv.first("cram"), reference_fasta(ctx)
+    log = ctx.logs / "reference_full.log"
+    # Uncompressed BAM output forces full sequence reconstruction at minimal encoding cost.
+    res = run(["bash", "-o", "pipefail", "-c",
+               f"samtools view -@ {ctx.threads} -T '{fasta}' -u '{cram.path}' | samtools view -c -@ 2 -"],
+              capture=True, check=False)
+    err = res.stderr or ""
+    with open(log, "a") as fh:
+        fh.write(f"full_decode rc={res.returncode}\n{err[-5000:]}\n")
+    if res.returncode != 0 or "md5" in err.lower() or "mismatch" in err.lower():
+        raise RuntimeError("Full CRAM decode failed — reference differs somewhere:\n" + err[-1500:])
+    info = {"reads_decoded": int(res.stdout.strip().split()[-1]), "md5_mismatches": 0}
+    write_json(full_decode_file(ctx), info)
+    return info
+
+
+FULL = Stage(
+    name="reference_full", version="1", title="Reference: decode every CRAM read (one-time proof)",
+    fn=_full_decode, inputs=lambda ctx: [f.path for f in ctx.inv.of("cram")][:1] + [ready_file(ctx)],
+    outputs=lambda ctx: [full_decode_file(ctx)],
+    available=lambda ctx: None if ctx.inv.first("cram") and reference_fasta(ctx)
+    else "needs a CRAM and a verified reference",
+)
