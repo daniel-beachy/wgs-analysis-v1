@@ -38,6 +38,25 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 
 More commands are added as each development step lands (see `docs/PLAN.md`).
 
+## Running the pipeline
+
+```bash
+pixi run wgs run                  # all stages; anything already up to date is skipped
+pixi run wgs run --only qc        # a single stage
+pixi run wgs run --force coverage # recompute one stage
+```
+
+Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth) and `qc`. Results go to `wgs-data/work/<sample>/`.
+
+## About the reference genome
+
+A CRAM file stores only how your reads differ from a reference genome. Each block also records an MD5 fingerprint of the reference used to compress it. tellmeGen did not ship that reference, so `wgs run --only reference` rebuilds it from Ensembl GRCh37 release 75. It checks the download against Ensembl's published checksum and renames contigs to match the CRAM, and N-masks the chrY PARs. It then proves the result:
+
+- every CRAM block it decodes must match its stored fingerprint (on this dataset, 17.5M reads across all 84 contigs, 0 errors);
+- every VCF REF allele must match (0 mismatches).
+
+As a negative control, changing a single base made decoding fail. So the rebuilt reference is byte-identical to the one tellmeGen used. Details are in [ADR-008](docs/DECISIONS.md).
+
 ## Graceful degradation
 
 Each dashboard section declares the inputs it **requires** and the inputs that **enhance** it. With only a raw genotype file you still get traits and ancestry. With a VCF you get everything except read-based checks. With CRAM plus a matching reference you also get coverage, callability and CYP2D6 structural calls. Outputs from optional external tools (PharmCAT, Cyrius, hap.py/vcfeval, pgsc_calc, Haplogrep, yhaplo, mosdepth, ...) are ingested when present but never required.

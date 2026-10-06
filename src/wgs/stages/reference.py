@@ -159,7 +159,7 @@ def _verify_vcf(ctx: Context, fasta: Path) -> dict:
     if not vcf:
         return {}
     res = run(f"bcftools norm --check-ref w -f '{fasta}' -Ou '{vcf}' 2>&1 >/dev/null | "
-              f"grep -ci 'mismatch' || true", shell=True, capture=True, check=False)
+              f"grep -c '^REF_MISMATCH' || true", shell=True, capture=True, check=False)
     mismatches = int((res.stdout or "0").strip().splitlines()[-1] or 0)
     return {"vcf_ref_mismatches": mismatches}
 
