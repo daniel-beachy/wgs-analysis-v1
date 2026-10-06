@@ -54,6 +54,7 @@ class Source:
     licence: str = ""
     cadence: str = ""                  # how often upstream changes, for display
     description: str = ""
+    schema: int = 1                    # bump when build() output changes, so stored versions are rebuilt
 
     def probe(self, pin: str | None = None) -> list[Upstream]:
         raise NotImplementedError
@@ -102,7 +103,7 @@ class Store:
             rows = duckdb.connect().execute(f"SELECT count(*) FROM '{p}'").fetchone()[0]
             tables[name] = {"path": str(p.relative_to(self.root)), "rows": rows, "bytes": p.stat().st_size,
                             "sha256": _sha256(p)}
-        version = {"version": built.version, "built": now(), "tables": tables,
+        version = {"version": built.version, "built": now(), "schema": src.schema, "tables": tables,
                    "upstream": [u.__dict__ for u in built.upstream], "notes": built.notes}
         write_json(vdir / "source.json", {"source": src.id, **version})
         entry["versions"] = [v for v in entry["versions"] if v["version"] != built.version] + [version]
@@ -117,10 +118,11 @@ class Store:
         entry["versions"] = sorted(kept, key=lambda v: v["version"], reverse=True)
         write_json(self.index_file, idx)
 
-    def kept_matching(self, source_id: str, fp: list[str]) -> dict | None:
+    def kept_matching(self, source_id: str, fp: list[str], schema: int = 1) -> dict | None:
         """A stored version whose upstream matches `fp` and whose files are intact (lets un-pinning skip downloads)."""
         for v in self.index()["sources"].get(source_id, {}).get("versions", []):
-            if _fingerprint(v) == fp and all((self.root / t["path"]).exists() for t in v["tables"].values()):
+            if _fingerprint(v) == fp and v.get("schema", 1) == schema and \
+                    all((self.root / t["path"]).exists() for t in v["tables"].values()):
                 return v
         return None
 
@@ -164,8 +166,8 @@ def refresh(cfg: Config, scratch: Path, only: list[str] | None = None, pin: dict
             up = src.probe(p)
             cur = store.current(src.id)
             fp = [u.fingerprint() for u in up]
-            same = cur and _fingerprint(cur) == fp
-            kept = None if same or force else store.kept_matching(src.id, fp)
+            same = cur and _fingerprint(cur) == fp and cur.get("schema", 1) == src.schema
+            kept = None if same or force else store.kept_matching(src.id, fp, src.schema)
             if kept:
                 store.activate(src.id, kept["version"])
                 out[src.id] = f"updated ({kept['version']})"

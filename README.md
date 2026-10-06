@@ -65,6 +65,23 @@ pixi run wgs run                              # re-annotate and publish; a new r
 
 The dashboard's **What changed** tab then shows which sources moved to a new version, which findings were added, removed or regraded, and every variant whose ClinVar classification changed. A sensible routine is to refresh monthly. Every finding carries an evidence grade and a call-confidence grade, each with reasons ([ADR-013](docs/DECISIONS.md), and the "How this project grades its confidence" section of the [primer](docs/GENETICS_PRIMER.md)).
 
+### Knowledge sources
+
+| Source | Used for | Licence |
+|---|---|---|
+| [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) (variants + per-lab submissions) | Variant classifications, review stars, who says so | Public domain |
+| [ClinGen](https://clinicalgenome.org/) | Gene–disease validity, dosage sensitivity, actionability | CC0 |
+| [ACMG SF v3.3](https://www.gimjournal.org/) | 84 medically actionable genes and their reporting rules | Gene list from the published guideline |
+| [Mondo](https://mondo.monarchinitiative.org/) | Disease names, definitions, cross-references | CC BY 4.0 |
+| [HPO](https://hpo.jax.org/) | Inheritance per disease, gene–disease links | HPO licence (free, attribution) |
+| [Orphanet](https://www.orphadata.com/) | Inheritance, onset, prevalence of rare diseases | CC BY 4.0 |
+| [gnomAD](https://gnomad.broadinstitute.org/) v2.1.1 / v4.1 constraint | Population frequency; how well genes tolerate broken copies | CC0 |
+| [1000 Genomes](https://www.internationalgenome.org/) | Population frequency fallback | Open (Fort Lauderdale) |
+| [AlphaMissense](https://github.com/google-deepmind/alphamissense) | Missense damage prediction | CC BY-NC-SA 4.0 (personal, non-commercial use) |
+| [REVEL](https://sites.google.com/site/revelgenomics/) | Missense damage prediction | Free for non-commercial use |
+
+AlphaMissense and REVEL are licensed for non-commercial use, which this personal project is. The downloaded files stay in `wgs-data/knowledge/` and are never committed to the repo.
+
 ## Opening the dashboard (any machine, nothing to install)
 
 Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` folder (`.app` on a Mac, `.exe` on Windows). Your browser opens on a local page (`http://127.0.0.1:8787`); the program quits by itself about a minute after you close the tab. Everything runs on your computer — no internet needed, nothing is uploaded.

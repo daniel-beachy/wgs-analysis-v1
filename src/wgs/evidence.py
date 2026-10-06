@@ -10,6 +10,16 @@
   High / Medium / Low / Not callable. From the variant caller's filter, genotype quality (GQ),
   read depth (DP), allele balance (VAF) and agreement with the provider's independent genotype file.
 
+Model 2 adds:
+
+* **Inheritance-aware interpretation** — what a variant means depends on how the condition is
+  inherited (see ``wgs.inheritance``). One copy in a recessive condition → carrier; one copy in a
+  dominant condition → may matter for you. Inheritance is looked up per *condition* (ClinVar's
+  condition IDs → HPO / Orphanet via Mondo) before falling back to everything known about the gene.
+* **Medically actionable genes** — ACMG SF v3.3 reporting rules and ClinGen actionability scores.
+* **Predicted evidence** — AlphaMissense, REVEL and gene constraint for rare variants no expert has
+  classified. Always labelled "predicted" and capped at Limited.
+
 Every grade comes with plain-language reasons so the dashboard can show *why*, not just *what*.
 The rules live in this one module so they can be read, tested and versioned (MODEL_VERSION is
 recorded in each release; changing a rule shows up in "What changed").
@@ -17,7 +27,9 @@ recorded in each release; changing a rule shows up in "What changed").
 
 from __future__ import annotations
 
-MODEL_VERSION = "1"
+import re
+
+MODEL_VERSION = "2"
 
 EVIDENCE = ["Limited", "Moderate", "Strong"]
 CALL = ["Not callable", "Low", "Medium", "High"]
@@ -127,3 +139,105 @@ def overall(evidence: str, call: str) -> str:
         return "Not callable"
     call_cap = {"High": "Strong", "Medium": "Moderate", "Low": "Limited"}[call]
     return OVERALL[min(OVERALL.index(evidence), OVERALL.index(call_cap))]
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Model 2: inheritance, actionability, predictions
+# ---------------------------------------------------------------------------------------------------------------
+
+LOF = {"stop_gained", "frameshift", "splice_acceptor", "splice_donor", "start_lost"}
+REVEL_SUPPORTING, REVEL_MODERATE, REVEL_STRONG = 0.644, 0.773, 0.932   # Pejaver et al. 2022 (ClinGen PP3)
+AM_LIKELY_PATHOGENIC = 0.564                                           # Cheng et al. 2023
+LOEUF_CONSTRAINED = 0.6                                                # gnomAD v4 guidance
+PREDICTED_MAX_AF = 0.001                                               # rare enough to be worth a look
+PREDICTED_CAP = "Limited"
+
+
+def is_lof(consequence: str | None) -> bool:
+    return bool(set((consequence or "").split("&")) & LOF)
+
+
+def role(modes: set[str], zygosity: str | None, chrom: str | None) -> tuple[str, str]:
+    """What carrying this genotype means given the inheritance.
+
+    Returns ('carrier' | 'affected' | 'possible' | 'unknown', why)."""
+    from . import inheritance as inh
+
+    core = modes - {"DG", "MF", "SP"}
+    if not core:
+        return "unknown", "How this condition is inherited is not recorded"
+    if zygosity == "hom" and core & (inh.RECESSIVE | inh.X_LINKED):
+        return "affected", "Two copies of a variant in a recessive gene: both copies of the gene are affected"
+    if chrom == "X" and zygosity == "hemi" and core & inh.X_LINKED:
+        return "affected", "X-linked gene and a single X chromosome: the one copy you have carries the variant"
+    if zygosity == "het" and core <= inh.RECESSIVE:
+        return "carrier", ("Recessive condition: one copy usually makes you a healthy carrier who could pass it on; "
+                           "the condition needs two non-working copies")
+    if zygosity == "het" and chrom == "X" and core <= {"XLR", "XL"}:
+        return "carrier", "X-linked recessive: with two X chromosomes, one copy usually makes you a carrier"
+    if core & inh.DOMINANT:
+        if core & inh.RECESSIVE:
+            return "possible", ("This gene causes both dominant and recessive conditions: one copy may matter for the "
+                                "dominant one and makes you a carrier for the recessive one")
+        return "possible", "Dominant condition: one copy can be enough, though many carriers never develop it"
+    return "unknown", "Inheritance pattern does not settle what one copy means"
+
+
+def acmg_reportable(rule: str | None, *, copies: int, zygosity: str | None, consequence: str | None,
+                    aa_change: str | None, compound: bool = False) -> bool:
+    """Would a clinical lab report this P/LP genotype as an ACMG secondary finding?"""
+    if not rule:
+        return False
+    r = rule.lower()
+    if "c282y" in r:
+        return zygosity == "hom" and bool(re.search(r"C282Y|282C>282Y", aa_change or ""))
+    if "biallelic" in r:
+        return copies == 2 or compound
+    if "truncating" in r:
+        return is_lof(consequence)
+    return True
+
+
+def predicted_evidence(*, consequence: str | None, am_score: float | None, revel: float | None,
+                       loeuf: float | None, popmax_af: float | None, kg_af: float | None,
+                       recessive_gene: bool) -> tuple[str | None, list[str]]:
+    """Grade a computational prediction for a rare, unclassified variant. Returns (None, []) if not flagged.
+
+    Only flags variants where predictors agree or are calibrated to strong evidence, so the list stays short
+    enough to be worth reading. Never above Limited: predictions are not clinical classifications."""
+    afs = [a for a in (popmax_af, kg_af) if a is not None]
+    if afs and max(afs) >= PREDICTED_MAX_AF:
+        return None, []
+    reasons: list[str] = []
+    flagged = False
+    if is_lof(consequence):
+        if loeuf is not None and loeuf < LOEUF_CONSTRAINED:
+            flagged = True
+            reasons.append(f"Predicted to break the gene ({consequence.replace('_', ' ')}), and the gene is intolerant "
+                           f"of broken copies (gnomAD LOEUF {loeuf:.2f} < {LOEUF_CONSTRAINED})")
+        elif recessive_gene:
+            flagged = True
+            reasons.append(f"Predicted to break the gene ({consequence.replace('_', ' ')}) in a gene where broken "
+                           "copies cause recessive disease")
+        if flagged:
+            reasons.append("Not every predicted break is real (e.g. near the end of a gene the protein may survive)")
+    elif "missense" in (consequence or ""):
+        am_lp = am_score is not None and am_score > AM_LIKELY_PATHOGENIC
+        if revel is not None and revel >= REVEL_STRONG:
+            flagged = True
+            reasons.append(f"REVEL {revel:.3f} ≥ {REVEL_STRONG}: ClinGen-calibrated strong computational evidence")
+        elif revel is not None and revel >= REVEL_SUPPORTING and am_lp:
+            flagged = True
+            level = "moderate" if revel >= REVEL_MODERATE else "supporting"
+            reasons.append(f"REVEL {revel:.3f} ({level} computational evidence) and AlphaMissense {am_score:.2f} "
+                           "(likely pathogenic) agree")
+        elif revel is None and am_score is not None and am_score >= 0.9:
+            flagged = True
+            reasons.append(f"AlphaMissense {am_score:.2f} (strongly likely pathogenic); no REVEL score")
+    if not flagged:
+        return None, []
+    reasons.append("Rare: " + (f"at most {max(afs):.3%} in any population" if afs else "not seen in gnomAD or 1000 "
+                                                                                        "Genomes"))
+    reasons.append("Computer prediction only: no lab or expert has classified this variant, so it is capped at "
+                   "Limited evidence")
+    return PREDICTED_CAP, reasons

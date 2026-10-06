@@ -17,6 +17,8 @@ from . import Built, Source, Upstream
 from .http import fetch, head, listing
 
 BASE = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh37"
+# One row per lab submission (SCV): which lab said what, about which condition. The VCF only has the merged view.
+SUBMISSIONS = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/submission_summary.txt.gz"
 
 STARS = {
     "practice_guideline": 4,
@@ -27,23 +29,28 @@ STARS = {
     "criteria_provided,_single_submitter": 1,
 }
 
+
 # ClinVar significance → a small fixed vocabulary the rest of the tool reasons about
-SIG_CLASS_SQL = """
+def sig_class_sql(s: str = "s") -> str:
+    return """
 CASE
-  WHEN s IS NULL THEN 'other'
-  WHEN s LIKE 'conflicting%' THEN 'conflicting'
-  WHEN s LIKE 'pathogenic%' THEN 'pathogenic'
-  WHEN s LIKE 'likely_pathogenic%' THEN 'likely_pathogenic'
-  WHEN s LIKE 'uncertain%' OR s LIKE 'vus%' THEN 'uncertain'
-  WHEN s LIKE 'benign%' THEN 'benign'
-  WHEN s LIKE 'likely_benign%' THEN 'likely_benign'
-  WHEN s = 'drug_response' THEN 'drug_response'
-  WHEN s IN ('risk_factor', 'likely_risk_allele', 'established_risk_allele') THEN 'risk_factor'
-  WHEN s = 'protective' THEN 'protective'
-  WHEN s IN ('association', 'affects', 'confers_sensitivity') THEN 'association'
+  WHEN {s} IS NULL THEN 'other'
+  WHEN {s} LIKE 'conflicting%' THEN 'conflicting'
+  WHEN {s} LIKE 'pathogenic%' THEN 'pathogenic'
+  WHEN {s} LIKE 'likely_pathogenic%' THEN 'likely_pathogenic'
+  WHEN {s} LIKE 'uncertain%' OR {s} LIKE 'vus%' THEN 'uncertain'
+  WHEN {s} LIKE 'benign%' THEN 'benign'
+  WHEN {s} LIKE 'likely_benign%' THEN 'likely_benign'
+  WHEN {s} = 'drug_response' THEN 'drug_response'
+  WHEN {s} IN ('risk_factor', 'likely_risk_allele', 'established_risk_allele') THEN 'risk_factor'
+  WHEN {s} = 'protective' THEN 'protective'
+  WHEN {s} IN ('association', 'affects', 'confers_sensitivity') THEN 'association'
   ELSE 'other'
 END
-"""
+""".replace("{s}", s)
+
+
+SIG_CLASS_SQL = sig_class_sql()
 
 
 class ClinVar(Source):
@@ -52,6 +59,7 @@ class ClinVar(Source):
     homepage = "https://www.ncbi.nlm.nih.gov/clinvar/"
     licence = "Public domain (US Government work); see NCBI policies"
     cadence = "weekly"
+    schema = 3  # 2: adds condition_ids (CLNDISDB); 3: per-lab submissions table
     description = ("NCBI's archive of what labs and expert panels have concluded about specific variants "
                    "(pathogenic, benign, drug response…), with a review status shown as 0–4 stars.")
 
@@ -60,7 +68,7 @@ class ClinVar(Source):
             year = pin[:4]
             url = f"{BASE}/archive_2.0/{year}/clinvar_{pin}.vcf.gz"
             return [head(url), head(url + ".tbi")]
-        return [head(f"{BASE}/clinvar.vcf.gz"), head(f"{BASE}/clinvar.vcf.gz.tbi")]
+        return [head(f"{BASE}/clinvar.vcf.gz"), head(f"{BASE}/clinvar.vcf.gz.tbi"), head(SUBMISSIONS)]
 
     @staticmethod
     def archive_dates() -> list[str]:
@@ -77,7 +85,7 @@ class ClinVar(Source):
         version = f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else upstream[0].last_modified[:10]
         tsv = scratch / "clinvar.tsv"
         fmt = ("%CHROM\t%POS\t%ID\t%REF\t%ALT\t%INFO/ALLELEID\t%INFO/CLNSIG\t%INFO/CLNREVSTAT\t%INFO/CLNDN\t"
-               "%INFO/GENEINFO\t%INFO/MC\t%INFO/CLNVC\t%INFO/ORIGIN\t%INFO/CLNSIGCONF\t%INFO/RS\n")
+               "%INFO/GENEINFO\t%INFO/MC\t%INFO/CLNVC\t%INFO/ORIGIN\t%INFO/CLNSIGCONF\t%INFO/RS\t%INFO/CLNDISDB\n")
         with open(tsv, "w") as fh:
             subprocess.run(["bcftools", "query", "-f", fmt, str(vcf)], stdout=fh, stderr=subprocess.DEVNULL, check=True)
         stars = " ".join(f"WHEN '{k}' THEN {v}" for k, v in STARS.items())
@@ -90,7 +98,7 @@ class ClinVar(Source):
               columns={{'chrom':'VARCHAR','pos':'VARCHAR','id':'VARCHAR','ref':'VARCHAR','alt':'VARCHAR',
                        'allele_id':'VARCHAR','clnsig':'VARCHAR','revstat':'VARCHAR','disease':'VARCHAR',
                        'geneinfo':'VARCHAR','mc':'VARCHAR','vtype':'VARCHAR','origin':'VARCHAR',
-                       'sigconf':'VARCHAR','rs':'VARCHAR'}})
+                       'sigconf':'VARCHAR','rs':'VARCHAR','disdb':'VARCHAR'}})
           ), n AS (
             SELECT
               chrom, CAST(pos AS INTEGER) AS pos, ref, alt,
@@ -107,7 +115,9 @@ class ClinVar(Source):
                 AS molecular_consequences,
               NULLIF(vtype, '.') AS variant_type,
               CAST(NULLIF(origin, '.') AS INTEGER) AS origin_bits,
-              NULLIF(sigconf, '.') AS conflicting_detail
+              NULLIF(sigconf, '.') AS conflicting_detail,
+              -- per-condition ontology IDs ('|' between conditions): MONDO / OMIM / Orphanet / MedGen
+              NULLIF(disdb, '.') AS condition_ids
             FROM raw
             WHERE alt <> '.'
           )
@@ -120,5 +130,41 @@ class ClinVar(Source):
         ) TO '{dst}' (FORMAT parquet, COMPRESSION zstd)
         """)
         n = con.execute(f"SELECT count(*) FROM '{dst}'").fetchone()[0]
-        return Built(version=version, tables={"variants": dst}, upstream=upstream,
-                     notes={"records": n, "assembly": "GRCh37"})
+        tables = {"variants": dst}
+        notes = {"records": n, "assembly": "GRCh37"}
+        if len(upstream) > 2:  # pinned archive builds have no matching per-lab file; claims fall back to the VCF
+            tables["submissions"] = _submissions(con, fetch(upstream[2].url, scratch / "subs.txt.gz",
+                                                            upstream[2].size), out)
+            notes["submissions"] = con.execute(f"SELECT count(*) FROM '{tables['submissions']}'").fetchone()[0]
+        return Built(version=version, tables=tables, upstream=upstream, notes=notes)
+
+
+def _submissions(con, src: Path, out: Path) -> Path:
+    import gzip
+
+    with gzip.open(src, "rt") as fh:
+        skip = 1
+        for line in fh:
+            if line.startswith("#VariationID\t"):
+                names = line[1:].rstrip("\n").split("\t")
+                break
+            skip += 1
+    cols = "{" + ", ".join(f"'{n}': 'VARCHAR'" for n in names) + "}"
+    dst = out / "submissions.parquet"
+    con.execute(f"""
+    COPY (
+      SELECT CAST(VariationID AS BIGINT) AS variation_id,
+             ClinicalSignificance AS significance,
+             {sig_class_sql("lower(replace(ClinicalSignificance, ' ', '_'))")} AS sig_class,
+             -- 'C0001:Name;C0002:Name' → names; 'na' means MedGen had no ID, so fall back to what was submitted
+             list_filter(list_transform(string_split(ReportedPhenotypeInfo, ';'),
+                                        x -> trim(regexp_replace(x, '^[^:]*:', ''))), x -> x <> '') AS conditions,
+             SubmittedPhenotypeInfo AS submitted_condition,
+             Submitter AS submitter, SCV AS scv, ReviewStatus AS review_status, CollectionMethod AS method,
+             try_strptime(NULLIF(DateLastEvaluated, '-'), '%b %d, %Y')::DATE AS evaluated,
+             ContributesToAggregateClassification = 'yes' AS contributes
+      FROM read_csv('{src}', delim='\t', header=false, skip={skip}, quote='', columns={cols},
+                    null_padding=true, auto_detect=false)
+      ORDER BY variation_id
+    ) TO '{dst}' (FORMAT parquet, COMPRESSION zstd)""")
+    return dst

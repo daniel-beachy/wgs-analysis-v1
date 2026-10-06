@@ -252,7 +252,7 @@ Benign  ─  Likely benign  ─  VUS (uncertain)  ─  Likely pathogenic  ─  P
 
 - **VUS (Variant of Uncertain Significance)** means *unknown*, not "probably bad". Most VUS are later reclassified as benign. This project never treats a VUS as a finding.
 - **ClinVar** is the public database where labs submit classifications. Its **review stars** (0–4) show how well-supported a classification is: 0 = one submitter with no criteria; 2+ = several labs agree; 3–4 = expert panel or practice guideline.
-- **ACMG SF (secondary findings) list:** about 80 genes where a pathogenic variant is medically actionable (e.g. *BRCA1*, *LDLR*, *MYH7*). In the dashboard these are behind a click-to-reveal panel.
+- **ACMG SF (secondary findings) list:** 84 genes (v3.3) where a pathogenic variant is medically actionable (e.g. *BRCA1*, *LDLR*, *MYH7*). The Health page checks all of them first and shows how much of each gene was readable in your data.
 
 ### Variant effects: consequence and impact
 
@@ -302,12 +302,22 @@ Every claim in the dashboard carries two separate grades, and each grade lists t
 
 **The overall grade is the weaker of the two.** Strong science about a shaky call is not a strong finding.
 
-How the evidence grade is set for a ClinVar-based claim (evidence model v1):
+How the evidence grade is set for a ClinVar-based claim (evidence model v2):
 
 1. **Start from ClinVar review stars.** 3–4★ (expert panel / practice guideline) → Strong; 2★ (several labs agree) → Moderate; 0–1★ → Limited.
 2. **Cap what ClinVar can't fully support.** Drug-response entries cap at Moderate until checked against CPIC/DPWG guidelines. "Conflicting" entries are always Limited.
 3. **Check population frequency** for disease claims. If over 5% of any population carries the variant, it can't cause a rare severe disease, so the grade drops to Limited (the ACMG "BA1" rule). Over 1% lowers it one step ("BS1").
 4. **Check the gene.** If ClinGen rates the gene–disease link *Disputed* or *Refuted*, the grade drops to Limited. If ClinGen rates it *Limited*, the grade drops one step.
+
+Then three more questions turn "the variant is pathogenic" into "what it means for *you*":
+
+5. **Which condition do the labs actually mean?** A ClinVar record merges every condition any lab named — some labs list every disease of the gene. The dashboard reads the individual lab submissions and keeps the conditions that labs name specifically; the rest are shown as "also listed". You can see every lab's verdict under **Who says so**.
+6. **How is that condition inherited?** Inheritance comes from HPO and Orphanet (via the Mondo disease ontology), falling back to the gene. Combined with how many copies you carry, this sets **your role**: *carrier* (one copy, recessive), *both copies affected*, *may matter* (dominant: one copy can be enough, though often it isn't), or *unclear*. Carrier results go to the Carrier page.
+7. **Is it medically actionable?** If the gene is on the ACMG SF list, the dashboard applies its reporting rule (e.g. recessive genes need two copies; *HFE* only counts two copies of C282Y) and shows ClinGen's actionability score.
+
+**Computer predictions** fill the gap for rare variants no lab has classified. A variant is flagged only if it is rare (under 0.1% in every population), sits in a known disease gene, and either breaks the gene (in a gene that doesn't tolerate that, by LOEUF, or a recessive gene) or both AlphaMissense and REVEL call it damaging (or REVEL alone reaches the "strong" threshold). These are **always Limited**: prediction tools are useful hints, not verdicts.
+
+**Risk factors** (common variants with small effects) get no role — the dashboard just tells you whether you carry one or two copies.
 
 How call confidence is set: DeepVariant must call it PASS. Then a genotype quality (GQ) of at least 30 with at least 15 reads gives High, and a GQ of at least 20 with at least 10 reads gives Medium. A read balance far from what's expected lowers it one step; for one copy, the expected range is 20–80% of reads. Disagreement with the provider's genotype file makes it Low.
 
@@ -346,6 +356,8 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | Term | Meaning |
 |---|---|
 | **ACMG/AMP** | US professional bodies whose guidelines define the five-tier variant classification |
+| **Actionability** | Whether something can be done (screening, prevention, treatment) if you have a variant; ClinGen scores this per gene |
+| **AlphaMissense** | Google DeepMind AI model scoring how likely a protein change (missense) is to be harmful, 0–1; above 0.564 is "likely pathogenic" |
 | **ACMG SF** | List of medically actionable genes reported as "secondary findings" |
 | **AD** | Allelic depth: reads supporting each allele |
 | **Admixture** | Estimated mix of ancestral populations |
@@ -353,6 +365,8 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Allele** | One version of a sequence at a position (e.g. A or G) |
 | **Alignment / mapping** | Placing reads at their position on the reference |
 | **ALT** | The non-reference allele |
+| **Autosomal dominant (AD)** | One altered copy on chromosomes 1–22 can cause the condition; each child of a carrier has a 1-in-2 chance of inheriting it |
+| **Autosomal recessive (AR)** | Both copies on chromosomes 1–22 must be altered; one copy makes you a healthy carrier |
 | **Autosome** | Chromosomes 1–22 (not X/Y) |
 | **b37 / GRCh37 / hg19** | The 2009 reference genome build used by your data |
 | **BAM / CRAM** | Binary files of aligned reads; CRAM is smaller because it is reference-based |
@@ -369,9 +383,11 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Concordance** | Agreement between two sets of genotype calls |
 | **Consequence** | What a variant does to a gene: missense, synonymous, frameshift, intron… |
 | **Contig** | A continuous piece of the reference sequence |
+| **Compound heterozygous** | Two *different* altered variants in the same gene, one on each copy; for a recessive condition this can be like having two altered copies, but only if they are on different copies (not "in cis") |
 | **Coverage / depth (DP)** | Number of reads over a position |
 | **CPIC / DPWG** | Pharmacogenomic guideline groups (US / Netherlands) |
 | **DeepVariant** | Google's deep-learning variant caller, used by tellmeGen |
+| **Digenic** | A condition that needs variants in two different genes together |
 | **Diplotype** | Your pair of star alleles for a gene |
 | **dbSNP / rsID** | Catalogue of known variants and their IDs |
 | **Duplicate reads** | PCR copies of the same DNA fragment |
@@ -391,14 +407,19 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Heterozygous / homozygous** | Two different / two identical alleles |
 | **HGVS** | Standard notation for describing variants (`c.` = coding DNA, `p.` = protein) |
 | **Impact** | How disruptive a consequence is: High (likely breaks protein), Moderate, Low, Modifier (non-coding) |
+| **Inheritance** | How a condition passes through families: dominant, recessive, X-linked, mitochondrial, etc. It decides what one copy of a variant means for you |
 | **Indel** | Small insertion or deletion |
+| **LOEUF** | gnomAD measure of how well a gene tolerates broken copies: low (under ~0.35) means healthy people almost never have one, so breaking it likely matters |
 | **LoF** | Loss-of-function: variant expected to disable a gene copy |
 | **MAPQ** | Mapping quality |
 | **MD5 / SHA-256** | File fingerprints (checksums) used to detect any change |
 | **Metaboliser status** | How quickly your enzymes process certain drugs |
 | **Missense / nonsense / synonymous** | Changes one amino acid / creates a stop / no amino-acid change |
+| **Mitochondrial inheritance (MT)** | Passed down only from the mother, through the mitochondria's own small genome |
+| **Mondo** | Disease ontology that unifies disease names and IDs from OMIM, Orphanet and others |
 | **MNV** | Multi-nucleotide variant |
 | **Monogenic / polygenic** | Caused by one gene / by many genes together |
+| **Multifactorial** | Caused by many genes plus environment together, rather than one gene |
 | **Multiallelic** | A site with more than one ALT allele |
 | **N** | An unknown or masked base |
 | **NMD** | Nonsense-mediated decay: the cell destroys messages with an early stop, so no faulty protein is made |
@@ -414,8 +435,10 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
 | **Pileup** | The stack of reads over a position |
 | **PharmCAT / ClinPGx** | Pharmacogenomics calling tool / knowledge base |
-| **PRS / PGS** | Polygenic risk (or score) |
+| **PRS / PGS (Polygenic risk score)** | A score adding up the small effects of many variants into one number, usually shown as a percentile |
+| **Predicted (computer prediction)** | A variant flagged by AI/statistical tools but never classified by a lab; always graded Limited here |
 | **Precision / recall / F1** | Benchmark accuracy measures |
+| **REVEL** | A score (0–1) combining 13 prediction tools for missense variants; ClinGen thresholds: 0.644 supporting, 0.773 moderate, 0.932 strong evidence of harm |
 | **Reclassification** | A lab or expert panel changing a variant's ClinVar classification as evidence accumulates |
 | **Read** | One sequenced DNA fragment (150 letters here) |
 | **REF** | The reference allele |
@@ -423,6 +446,9 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Reference genome** | The standard map that genomes are compared to |
 | **Majority allele / reference-minor site** | A spot where the reference genome happens to carry the *rarer* version, so the "variant" listed is actually what most people have. Example: the GRCh37 reference carries Factor V Leiden (rs6025); most people, and a "two copies" result, have the normal version |
 | **rCRS** | Reference mitochondrial sequence |
+| **Secondary findings** | Medically actionable results looked for deliberately, beyond the reason a genome was sequenced (see ACMG SF) |
+| **Semi-dominant (SD)** | One copy causes a milder form, two copies a more severe form |
+| **Sporadic** | Usually occurs without being inherited (a new change in that person) |
 | **Splice site** | The boundary of an exon, where RNA is cut and joined; variants here can scramble the protein |
 | **Star allele (`*`)** | Named haplotype of a pharmacogene |
 | **SNP / SNV** | Single-letter variant (SNP usually means a common one) |
@@ -431,6 +457,8 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Transition / transversion** | A↔G or C↔T / all other single-letter swaps |
 | **VAF** | Variant allele fraction: share of reads showing the variant |
 | **UTR** | Untranslated region: the start (5′) and end (3′) of a gene's message that isn't turned into protein |
+| **X-linked (XL / XLR / XLD)** | Gene on the X chromosome. Recessive (XLR): XY people are affected with one copy, XX people are usually carriers. Dominant (XLD): one copy can affect anyone |
+| **Y-linked** | Gene on the Y chromosome, passed father to son |
 | **Variant** | A position where your DNA differs from the reference genome — usually harmless, everyone has ~4–5 million |
 | **VCF** | Variant Call Format: the standard variant file |
 | **VUS** | Variant of uncertain significance |

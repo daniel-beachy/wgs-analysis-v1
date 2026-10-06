@@ -55,10 +55,25 @@ export const CLASS_LABEL: Record<string, string> = {
   pathogenic: 'Pathogenic', likely_pathogenic: 'Likely pathogenic', uncertain: 'Uncertain significance',
   likely_benign: 'Likely benign', benign: 'Benign', conflicting: 'Conflicting', drug_response: 'Drug response',
   risk_factor: 'Risk factor', association: 'Association', protective: 'Protective', other: 'Other',
+  predicted: 'Predicted damaging',
 };
 export const CLASS_PILL: Record<string, string> = {
   pathogenic: 'fail', likely_pathogenic: 'fail', conflicting: 'warn', uncertain: 'warn', risk_factor: 'partial',
   drug_response: 'partial', association: '', protective: 'pass', benign: 'pass', likely_benign: 'pass', other: 'soon',
+  predicted: 'soon',
+};
+
+/** What your genotype means given the inheritance (evidence model v2): label, pill class. */
+export const ROLE: Record<string, [string, string]> = {
+  carrier: ['Carrier', 'pass'], affected: ['Both copies affected', 'fail'], possible: ['May matter', 'warn'],
+  unknown: ['Unclear', 'soon'],
+};
+
+/** Inheritance mode codes → glossary terms. */
+export const INH: Record<string, string> = {
+  AD: 'Autosomal dominant', AR: 'Autosomal recessive', SD: 'Semi-dominant', XLR: 'X-linked recessive',
+  XLD: 'X-linked dominant', XL: 'X-linked', YL: 'Y-linked', MT: 'Mitochondrial', MF: 'Multifactorial',
+  DG: 'Digenic', SP: 'Sporadic',
 };
 
 export const STAR_WORD: Record<number, string> = {

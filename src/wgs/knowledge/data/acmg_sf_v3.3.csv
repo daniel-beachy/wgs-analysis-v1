@@ -1,0 +1,98 @@
+gene,category,condition,omim,inheritance,report
+ABCD1,Inborn error of metabolism,Adrenoleukodystrophy,300100,XL,All P/LP (hemizygous or heterozygous)
+ACTA2,Cardiovascular,"Aortic aneurysm, familial thoracic 6",611788,AD,All P/LP
+ACTC1,Cardiovascular,Familial hypertrophic cardiomyopathy 11,612098,AD,All P/LP
+ACVRL1,Miscellaneous,Hereditary hemorrhagic telangiectasia type 2,600376,AD,All P/LP
+APC,Cancer,Adenomatous polyposis coli,175100,AD,All P/LP
+APOB,Cardiovascular,Familial hypercholesterolemia 2,144010,AD,All P/LP
+ATP7B,Miscellaneous,Wilson disease,277900,AR,Biallelic P/LP
+BAG3,Cardiovascular,Dilated cardiomyopathy 1HH,613881,AD,All P/LP
+BAG3,Cardiovascular,Myofibrillar myopathy 6,612954,AD,All P/LP
+BMPR1A,Cancer,Juvenile polyposis syndrome,174900,AD,All P/LP
+BRCA1,Cancer,"Breast-ovarian cancer, familial 1",604370,AD,All P/LP
+BRCA2,Cancer,"Breast-ovarian cancer, familial 2",612555,AD,All P/LP
+BTD,Inborn error of metabolism,Biotinidase deficiency,253260,AR,Biallelic P/LP
+CACNA1S,Miscellaneous,Malignant hyperthermia,601887,AD,All P/LP
+CALM1,Cardiovascular,Catecholaminergic polymorphic ventricular tachycardia 4,614916,AD,All P/LP
+CALM1,Cardiovascular,Long QT syndrome 14,616247,AD,All P/LP
+CALM2,Cardiovascular,Long QT syndrome 15,616249,AD,All P/LP
+CALM3,Cardiovascular,Long QT syndrome 16,618782,AD,All P/LP
+CASQ2,Cardiovascular,Catecholaminergic polymorphic ventricular tachycardia 2,611938,AR,Biallelic P/LP
+COL3A1,Cardiovascular,"Ehlers-Danlos syndrome, vascular type",130050,AD,All P/LP
+CYP27A1,Inborn error of metabolism,Cerebrotendinous xanthomatosis,213700,AR,Biallelic P/LP
+DES,Cardiovascular,Dilated cardiomyopathy 1I,604765,AD,All P/LP
+DES,Cardiovascular,Myofibrillar myopathy 1,601419,AD,All P/LP
+DSC2,Cardiovascular,"Arrhythmogenic right ventricular cardiomyopathy, type 11",610476,AD,All P/LP
+DSG2,Cardiovascular,"Arrhythmogenic right ventricular cardiomyopathy, type 10",610193,AD,All P/LP
+DSP,Cardiovascular,"Arrhythmogenic right ventricular cardiomyopathy, type 8",607450,AD,All P/LP
+DSP,Cardiovascular,"Dilated cardiomyopathy with woolly hair, palmoplantar keratoderma, and tooth agenesis",615821,AD,All P/LP
+ENG,Miscellaneous,Hereditary hemorrhagic telangiectasia type 1,187300,AD,All P/LP
+FBN1,Cardiovascular,Marfan's syndrome,154700,AD,All P/LP
+FLNC,Cardiovascular,Dilated cardiomyopathy,617047,AD,All P/LP
+FLNC,Cardiovascular,Myofibrillar myopathy 5,609524,AD,All P/LP
+GAA,Inborn error of metabolism,Pompe disease,232300,AR,Biallelic P/LP
+GLA,Cardiovascular,Fabry's disease,301500,XL,All P/LP (hemizygous or heterozygous)
+HFE,Miscellaneous,Hereditary hemochromatosis,235200,AR,p.C282Y homozygous only
+HNF1A,Miscellaneous,Maturity-Onset of Diabetes of the Young,600496,AD,All P/LP
+KCNH2,Cardiovascular,Long QT syndrome 2,613688,AD,All P/LP
+KCNQ1,Cardiovascular,Long QT syndrome 1,192500,AD,All P/LP
+LDLR,Cardiovascular,Familial hypercholesterolemia 1,143890,AD,All P/LP
+LMNA,Cardiovascular,Dilated cardiomyopathy 1A,115200,AD,All P/LP
+MAX,Cancer,Pheochromocytoma,171300,AD,All P/LP
+MEN1,Cancer,"Multiple endocrine neoplasia, type 1",131100,AD,All P/LP
+MLH1,Cancer,Lynch syndrome 2,609310,AD,All P/LP
+MSH2,Cancer,Lynch syndrome 1,120435,AD,All P/LP
+MSH6,Cancer,Lynch syndrome 5,614350,AD,All P/LP
+MUTYH,Cancer,MYH-associated polyposis,608456,AR,Biallelic P/LP
+MYBPC3,Cardiovascular,Familial hypertrophic cardiomyopathy 4,115197,AD,All P/LP
+MYH11,Cardiovascular,"Aortic aneurysm, familial thoracic 4",132900,AD,All P/LP
+MYH7,Cardiovascular,Dilated cardiomyopathy 1S,613426,AD,All P/LP
+MYH7,Cardiovascular,Familial hypertrophic cardiomyopathy 1,192600,AD,All P/LP
+MYL2,Cardiovascular,Familial hypertrophic cardiomyopathy 10,608758,AD,All P/LP
+MYL3,Cardiovascular,Familial hypertrophic cardiomyopathy 8,608751,AD,All P/LP
+NF2,Cancer,"Neurofibromatosis, type 2",101000,AD,All P/LP
+OTC,Inborn error of metabolism,Ornithine carbamoyltransferase deficiency,311250,XL,All P/LP (hemizygous or heterozygous)
+PALB2,Cancer,Hereditary breast cancer,114480,AD,All P/LP
+PCSK9,Cardiovascular,"Hypercholesterolemia, autosomal dominant, 3",603776,AD,All P/LP
+PKP2,Cardiovascular,"Arrhythmogenic right ventricular cardiomyopathy, type 9",609040,AD,All P/LP
+PLN,Cardiovascular,Dilated / arrhythmogenic cardiomyopathy (PLN),609909,AD,All P/LP
+PMS2,Cancer,Lynch syndrome 4,614337,AD,All P/LP
+PRKAG2,Cardiovascular,Familial hypertrophic cardiomyopathy 6,600858,AD,All P/LP
+PTEN,Cancer,PTEN hamartoma tumor syndrome,158350,AD,All P/LP
+RB1,Cancer,Retinoblastoma,180200,AD,All P/LP
+RBM20,Cardiovascular,Dilated cardiomyopathy 1DD,613172,AD,All P/LP
+RET,Cancer,Familial medullary thyroid carcinoma,155240,AD,All P/LP
+RET,Cancer,"Multiple endocrine neoplasia, type 2a",171400,AD,All P/LP
+RET,Cancer,"Multiple endocrine neoplasia, type 2b",162300,AD,All P/LP
+RPE65,Miscellaneous,RPE65-related retinopathy,204100,AR,Biallelic P/LP
+RYR1,Miscellaneous,Malignant hyperthermia,145600,AD,All P/LP
+RYR2,Cardiovascular,Catecholaminergic polymorphic ventricular tachycardia 1,604772,AD,All P/LP
+SCN5A,Cardiovascular,Brugada syndrome 1,601144,AD,All P/LP
+SCN5A,Cardiovascular,Dilated cardiomyopathy 1E,601154,AD,All P/LP
+SCN5A,Cardiovascular,Long QT syndrome 3,603830,AD,All P/LP
+SDHAF2,Cancer,Paragangliomas 2,601650,AD,All P/LP
+SDHB,Cancer,Hereditary paraganglioma-pheochromocytoma syndrome,115310,AD,All P/LP
+SDHC,Cancer,Paragangliomas 3,605373,AD,All P/LP
+SDHD,Cancer,Hereditary paraganglioma-pheochromocytoma syndrome,168000,AD,All P/LP
+SMAD3,Cardiovascular,Loeys-Dietz syndrome type 3,613795,AD,All P/LP
+SMAD4,Cancer,Juvenile polyposis syndrome,174900,AD,All P/LP
+SMAD4,Cancer,Juvenile polyposis/hereditary hemorrhagic telangiectasia syndrome,175050,AD,All P/LP
+STK11,Cancer,Peutz-Jeghers syndrome,175200,AD,All P/LP
+TGFBR1,Cardiovascular,Loeys-Dietz syndrome type 1A,609192,AD,All P/LP
+TGFBR2,Cardiovascular,Loeys-Dietz syndrome type 1B,610168,AD,All P/LP
+TMEM127,Cancer,Pheochromocytoma,171300,AD,All P/LP
+TMEM43,Cardiovascular,"Arrhythmogenic right ventricular cardiomyopathy, type 5",604400,AD,All P/LP
+TNNC1,Cardiovascular,Dilated cardiomyopathy 1Z,611879,AD,All P/LP
+TNNI3,Cardiovascular,Familial hypertrophic cardiomyopathy 7,613690,AD,All P/LP
+TNNT2,Cardiovascular,Dilated cardiomyopathy 1D,601494,AD,All P/LP
+TNNT2,Cardiovascular,Familial hypertrophic cardiomyopathy 2,115195,AD,All P/LP
+TP53,Cancer,Li-Fraumeni syndrome,151623,AD,All P/LP
+TPM1,Cardiovascular,Hypertrophic cardiomyopathy 3,115196,AD,All P/LP
+TRDN,Cardiovascular,Catecholaminergic polymorphic ventricular tachycardia 5,615441,AR,Biallelic P/LP
+TRDN,Cardiovascular,Long QT syndrome,,AR,Biallelic P/LP
+TSC1,Cancer,Tuberous sclerosis 1,191100,AD,All P/LP
+TSC2,Cancer,Tuberous sclerosis 2,613254,AD,All P/LP
+TTN,Cardiovascular,Dilated cardiomyopathy,604145,AD,P/LP truncating variants only
+TTR,Cardiovascular,Hereditary transthyretin-related amyloidosis,105210,AD,All P/LP
+VHL,Cancer,Von Hippel-Lindau syndrome,193300,AD,All P/LP
+WT1,Cancer,Wilms' tumor,194070,AD,All P/LP

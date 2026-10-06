@@ -123,6 +123,28 @@ def _genes_sql(ctx: Context) -> str:
             f"FROM '{_genes_in(ctx)[0]}' WHERE symbol IS NOT NULL ORDER BY symbol")
 
 
+def _acmg_in(ctx: Context) -> list[Path]:
+    st = Store(ctx.cfg)
+    paths = [st.table("acmg_sf", "genes"), st.table("ensembl", "genes"), coverage.out_dir(ctx) / "callable.parquet"]
+    return paths if annotate.annotations_path(ctx).exists() and all(paths) else []
+
+
+def _acmg_sql(ctx: Context) -> str:
+    acmg, genes, callable_ = _acmg_in(ctx)
+    return f"""
+    WITH g AS (SELECT symbol, chrom, start, "end" FROM '{genes}' WHERE symbol IN (SELECT gene FROM '{acmg}')
+               QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY "end" - start DESC) = 1),
+         cov AS (SELECT g.symbol, sum(least(c."end", g."end") - greatest(c.start, g.start))
+                        FILTER (WHERE c.state = 'CALLABLE') AS callable_bp, max(g."end" - g.start) AS span
+                 FROM g JOIN '{callable_}' c ON c.chrom = g.chrom AND c.start < g."end" AND c."end" > g.start
+                 GROUP BY g.symbol)
+    SELECT a.gene, a.category, string_agg(a.condition, '; ') AS conditions, any_value(a.inheritance) AS inheritance,
+           any_value(a.report) AS report, any_value(cov.span) AS gene_bp,
+           round(coalesce(any_value(cov.callable_bp), 0) / nullif(any_value(cov.span), 0), 4) AS callable_fraction
+    FROM '{acmg}' a LEFT JOIN cov ON cov.symbol = a.gene
+    GROUP BY a.gene, a.category ORDER BY a.category, a.gene"""
+
+
 TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context], str], str]] = [
     # name, transform version, inputs, sql, description
     ("variants", "1", lambda c: [variants.variants_parquet(c)] + ([genotypes.out_path(c)]
@@ -138,6 +160,8 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Your variant alleles with gene effect (Ensembl/bcftools csq), ClinVar, 1000 Genomes and gnomAD frequencies"),
     ("claims", "1", lambda c: [annotate.claims_path(c)], _claims_sql,
      "Graded statements about your genotypes: evidence strength, call confidence, reasons and sources"),
+    ("acmg_genes", "1", _acmg_in, _acmg_sql,
+     "ACMG secondary-findings genes checked, with how much of each gene region was callable in your data"),
     ("genes", "1", _genes_in, _genes_sql, "Ensembl gene coordinates (GRCh37) for searching by gene name"),
 ]
 
