@@ -10,7 +10,7 @@ Each step ends with a **checkpoint** where Daniel tries the result before we mov
 | 3 | Knowledge layer, evidence and confidence model, dated releases and diffs | Review the evidence model on real variants |
 | 4 | Health risk and carrier status | Section review |
 | 5 | Pharmacogenomics (PharmCAT, CYP2D6 via Cyrius) | Compare with tellmeGen |
-| 6 | Traits and polygenic score percentiles | Section review |
+| 6 | Traits and polygenic score percentiles, plus a "Brain & mind" deep-dive (autism/ADHD research explainer, SFARI gene check, polygenic percentiles with caveats) | Section review |
 | 7 | Ancestry and haplogroups | Section review |
 | 8 | "You vs the average human" body-map infographic | Visual review |
 | 9 | GIAB HG002 benchmark and demo mode | Accuracy numbers |
