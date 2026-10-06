@@ -323,3 +323,62 @@ def knowledge_refresh(
     res = refresh(_cfg(), _knowledge_scratch(), only=source or None, pin=pins, force=force, keep=keep)
     if any(v.startswith("failed") for v in res.values()):
         raise typer.Exit(1)
+
+
+@app.command("query")
+def query_cmd(
+    sql: str = typer.Argument(None, help="SQL to run; '-' reads it from stdin. Omit to list the tables."),
+    release: str = typer.Option(None, "--release", "-r", help="Release ID (default: newest)."),
+    fmt: str = typer.Option("table", "--format", "-f", help="table | csv | json"),
+    limit: int = typer.Option(200, help="Maximum rows to print."),
+):
+    """Run read-only SQL against a dashboard release (tables: claims, annotations, variants, ...)."""
+    import json
+    import sys
+
+    import duckdb
+
+    if sql == "-":
+        sql = sys.stdin.read()
+    rd = _cfg().releases_dir
+    index = json.loads((rd / "index.json").read_text())
+    rel = next((r for r in index["releases"] if r["id"] == release), None) if release else index["releases"][0]
+    if rel is None:
+        raise typer.BadParameter(f"no release {release}")
+    m = json.loads((rd / rel["manifest"]).read_text())
+    con = duckdb.connect()
+    for name, t in m["tables"].items():
+        con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{(rd / t['path']).as_posix()}')")
+    for name, d in m.get("documents", {}).items():
+        path = rd / (d["path"] if isinstance(d, dict) else d)
+        con.execute(f"CREATE VIEW doc_{name} AS SELECT * FROM read_json_auto('{path.as_posix()}')")
+    # Read-only sandbox: only this release folder is readable, nothing can be written.
+    con.execute(f"SET allowed_directories = ['{rd.as_posix()}/']")
+    con.execute("SET enable_external_access = false")
+    con.execute("SET lock_configuration = true")
+    if not sql:
+        console.print(f"Release [bold]{rel['id']}[/] · sample {m['sample']}")
+        for name, t in m["tables"].items():
+            console.print(f"  [cyan]{name}[/] ({t['rows']:,} rows) — {t.get('description', '')}")
+        console.print("  Documents (JSON) as views: " + ", ".join(f"doc_{d}" for d in m.get("documents", {})))
+        return
+    stmts = con.extract_statements(sql)
+    if len(stmts) != 1 or stmts[0].type != duckdb.StatementType.SELECT:
+        raise typer.BadParameter("only a single SELECT (or WITH … SELECT) query is allowed")
+    rel_ = con.sql(sql)
+    cols, rows = rel_.columns, rel_.fetchmany(limit)
+    if fmt == "json":
+        print(json.dumps([dict(zip(cols, r, strict=True)) for r in rows], default=str, indent=1))
+    elif fmt == "csv":
+        import csv
+
+        w = csv.writer(sys.stdout)
+        w.writerow(cols)
+        w.writerows(rows)
+    else:
+        t = Table(show_lines=False)
+        for c in cols:
+            t.add_column(c, overflow="fold")
+        for r in rows:
+            t.add_row(*("" if v is None else str(v) for v in r))
+        console.print(t)

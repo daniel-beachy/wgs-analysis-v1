@@ -39,8 +39,20 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 | `wgs doctor` | Lists the inputs it found, which sections are ready, partial or unavailable (and why), tool versions and workspace health |
 | `wgs init` | Writes `wgs.local.toml` |
 | `wgs verify-inputs` | Checks inputs against `MANIFEST.sha256` (reads everything, so it is slow) |
+| `wgs run` | Runs or resumes every pipeline stage and publishes a new dashboard release |
+| `wgs knowledge status` / `refresh` | Shows or updates the public knowledge versions (ClinVar, gnomAD, ClinGen, …) |
+| `wgs query "<SQL>"` | Read-only SQL against the newest release (`claims`, `annotations`, `variants`, …); `-` reads SQL from stdin |
 
 More commands are added as each development step lands (see `docs/PLAN.md`).
+
+### Exploring with an AI assistant
+
+Open an AI coding assistant (GitHub Copilot, Claude Code, …) in this repo and
+ask about your results, e.g. *"Walk me through my carrier findings and how sure
+we are about each."* [`AGENTS.md`](AGENTS.md) tells it where the data lives, how
+to query it with `wgs query`, what every column means, and how to talk about
+results responsibly (grades and reasons, not a diagnosis, ask before sensitive
+topics, never upload raw files).
 
 ## Running the pipeline
 

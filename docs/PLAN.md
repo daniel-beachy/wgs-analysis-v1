@@ -15,7 +15,7 @@ Each step ends with a **checkpoint** where Daniel tries the result before we mov
 | 8 | "You vs the average human" body-map infographic | Visual review |
 | 9 | GIAB HG002 benchmark and demo mode | Accuracy numbers |
 | 10 | End-to-end refresh: "What changed" | Simulated knowledge update |
-| 11 | Documentation, Windows test, polish | Final sign-off |
+| 11 | Documentation, Windows test, polish; AI helpers: a local read-only MCP server (`wgs mcp`) and an "Ask AI" button that copies a claim plus its evidence as a prompt | Final sign-off |
 
 ## Future options (not scheduled)
 
