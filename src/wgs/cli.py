@@ -235,3 +235,42 @@ def verify_inputs():
 @app.command()
 def version():
     console.print(__version__)
+
+
+@app.command("run")
+def run_cmd(
+    only: list[str] = typer.Option(None, "--only", help="Run only these stages (repeatable)."),
+    force: list[str] = typer.Option(None, "--force", help="Recompute these stages ('all' for everything)."),
+    threads: int = typer.Option(0, help="Worker threads (default: CPU count - 2)."),
+):
+    """Run the analysis pipeline. Stages whose inputs and code are unchanged are skipped."""
+    from .pipeline import Context, run_stage
+    from .stages.registry import STAGES
+
+    cfg = _cfg()
+    inv = discover(cfg)
+    ctx = Context(cfg=cfg, inv=inv, force=set(force or []))
+    if threads:
+        ctx.threads = threads
+    console.rule(f"wgs run — sample {ctx.sample}")
+    names = {s.name for s in STAGES}
+    for name in (only or []):
+        if name not in names:
+            console.print(f"[red]Unknown stage {name}. Known: {', '.join(sorted(names))}[/]")
+            raise typer.Exit(2)
+    failed = []
+    for stage in STAGES:
+        if only and stage.name not in only:
+            continue
+        try:
+            run_stage(ctx, stage)
+        except Exception as exc:
+            import traceback
+
+            failed.append(stage.name)
+            with open(ctx.logs / f"{stage.name}.log", "a") as fh:
+                fh.write(traceback.format_exc())
+            console.print(f"[red]✗ {stage.title} failed:[/] {exc} [dim](traceback in logs/{stage.name}.log)[/]")
+    if failed:
+        console.print(f"[red]{len(failed)} stage(s) failed: {', '.join(failed)}. Logs: {ctx.logs}[/]")
+        raise typer.Exit(1)
