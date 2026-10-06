@@ -57,7 +57,7 @@ A CRAM file stores only how your reads differ from a reference genome. Each bloc
 - every CRAM block it decodes must match its stored fingerprint (on this dataset, 17.5M reads across all 84 contigs, 0 errors);
 - every VCF REF allele must match (0 mismatches).
 
-As a negative control, changing a single base made decoding fail. So the rebuilt reference is byte-identical to the one tellmeGen used. Details are in [ADR-008](docs/DECISIONS.md).
+As a negative control, changing a single base made decoding fail. The optional one-time stage `wgs run --only reference_full` then decodes **every** read; on this dataset that was 868,564,724 reads with 0 mismatches (about 26 minutes). So the rebuilt reference matches the one tellmeGen used everywhere the CRAM depends on it. Details are in [ADR-008](docs/DECISIONS.md).
 
 ## Graceful degradation
 

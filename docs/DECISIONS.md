@@ -50,6 +50,7 @@ Each entry gives the decision, the alternatives considered, and why. Newest at t
 - **Verification (both must pass before anything uses the reference):**
   1. Decode reads from 3 random 200 kb windows on every main contig and from every scaffold. htslib verifies each CRAM slice's reference MD5 while reconstructing sequence.
   2. `bcftools norm --check-ref` must find 0 VCF REF mismatches.
+- **Full proof (optional, one-time):** the `reference_full` stage decodes every read (`samtools view -u | samtools view -c`) and writes `full_decode.json`. On this dataset it decoded 868,564,724 reads with 0 MD5 mismatches.
 - If verification fails, the CRAM-dependent stages (coverage, alignment stats) are skipped. Everything else still works from the VCF.
 
 ## ADR-009 Re-runnable stages with stamps
