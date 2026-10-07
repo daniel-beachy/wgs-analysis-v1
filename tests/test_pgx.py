@@ -98,14 +98,22 @@ def test_pheno_class(phenotype, cls):
     assert pgx._pheno_class(phenotype) == cls
 
 
-@pytest.mark.parametrize(("rec", "standard"), [
-    ("Initiate therapy with recommended starting dose.", True),
-    ("For PAIN: use label recommended age- or weight-specific dosing.", True),
-    ("No action is needed for this gene-drug interaction.", True),
-    ("Use citalopram per standard dosing guidelines.", True),
-    ("Avoid clopidogrel if possible. Use prasugrel or ticagrelor at standard dose.", False),
-    ("Consider a 50% reduction of recommended starting dose.", False),
-    ("Select alternative drug. Avoid use (no action otherwise).", False),   # "no action" must lead to count
+def _a(cls="Strong", dose=False, alt=False, other=False):
+    return {"classification": cls, "dosingInformation": dose, "alternateDrugAvailable": alt,
+            "otherPrescribingGuidance": other}
+
+
+@pytest.mark.parametrize(("ann", "rec", "cf", "expected"), [
+    (_a(dose=True), "Consider a 50% reduction.", False, "change"),
+    (_a(alt=True), "Avoid clopidogrel if possible.", False, "change"),
+    # DPWG venlafaxine: the wording opens "It is not possible to offer..." but the curated flags say avoid/adjust.
+    (_a("Unspecified", dose=True, alt=True), "It is not possible to offer adequately substantiated advice. Avoid.",
+     False, "change"),
+    (_a(other=True), "Use standard doses with therapeutic dose monitoring.", False, "note"),
+    (_a(), "Initiate therapy with recommended starting dose.", False, "standard"),
+    (_a("No recommendation", dose=True), "No recommendation based on insufficient evidence.", False, "standard"),
+    (_a(alt=True), "Ivacaftor is not recommended", True, "standard"),   # CFTR guidance only applies with CF
+    (_a(dose=True), "", False, "standard"),
 ])
-def test_is_standard(rec, standard):
-    assert pgx.is_standard(rec) is standard
+def test_tier_uses_curated_flags_not_wording(ann, rec, cf, expected):
+    assert pgx.tier(ann, rec, cf) == expected

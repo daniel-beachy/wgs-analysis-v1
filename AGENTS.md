@@ -77,7 +77,8 @@ SELECT * FROM doc_changes;
 | `acmg_genes` | one ACMG secondary-findings gene (v3.3, 84 genes) | `callable_fraction` = how much of the gene was readable |
 | `genes` | one Ensembl gene (GRCh37) | coordinates for gene lookups |
 | `pgx_genes` | one pharmacogene result (PharmCAT + Cyrius/T1K outside calls) | `diplotype`, `phenotype`, `activity_score`, `call_source`, missing positions, grades |
-| `pgx_drugs` | one guideline row for a drug (CPIC / DPWG / FDA) | `action` = guidance differs from standard; `recommendation` is HTML; FDA rows are ungraded |
+| `pgx_drugs` | one guideline row for a drug (CPIC / DPWG / FDA) | `tier`: `change` (dose or drug differs), `note` (extra advice, e.g. monitoring), `standard`, `none` (no advice for this genotype), set from ClinPGx's curated flags (`flags`); only CPIC/DPWG rows set a drug's bucket; `recommendation` is HTML; FDA rows are ungraded |
+| `gene_about` | one gene: plain-language description | `medlineplus_text` (public-facing, reviewed) else `ncbi_summary` (`ncbi_summary_source`: RefSeq/OMIM are curated, others machine-written). Use it to explain what a gene does. |
 | `pgx_positions` | one PharmCAT defining position, lifted to GRCh38 | `status`: reference / variant / not_callable / low_quality / no_call |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
@@ -99,6 +100,8 @@ Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 - `alt_is_major`: the "variant" is actually the common allele (the reference genome carries the rarer one).
 - `sensitive`: the topic needs consent before discussion (see §5).
 - `sources`: JSON list of `{source, version, record, url}` — cite these.
+
+The release also has a `checks` document (`checks.json`): automatic self-checks. If any failed, say so before relying on the rows they name.
 
 ## 4. Documents to lean on
 

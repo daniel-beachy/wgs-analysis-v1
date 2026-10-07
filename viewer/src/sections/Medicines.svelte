@@ -18,6 +18,7 @@
 
   let genes = $state<Row[]>([]);
   let drugs = $state<Row[]>([]);
+  let about = $state<Record<string, Row>>({});
   let loaded = $state(false);
   let error = $state('');
   let openGene = $state<string | null>(null);
@@ -25,6 +26,7 @@
   let search = $state('');
   let showStandard = $state(false);
   let showFda = $state(false);
+  let showNone = $state(false);
 
   $effect(() => {
     loaded = false;
@@ -32,39 +34,15 @@
       try {
         await useRelease(m);
         genes = (await query('SELECT * FROM pgx_genes ORDER BY gene')).rows;
-        drugs = (await query(`SELECT * FROM pgx_drugs WHERE matched OR (source IN ('CPIC', 'DPWG') AND len(messages) > 0)
-          ORDER BY drug, matched DESC, source`)).rows;
+        drugs = (await query('SELECT * FROM pgx_drugs ORDER BY drug, matched DESC, source')).rows;
+        about = {};
+        if (m.tables.gene_about) {
+          for (const r of (await query('SELECT * FROM gene_about WHERE gene IN (SELECT gene FROM pgx_genes)')).rows) about[r.gene] = r;
+        }
       } catch (e) { error = String(e); }
       loaded = true;
     })();
   });
-
-  // What each gene does, in one line a non-specialist can follow.
-  const ROLE: Record<string, string> = {
-    CYP2D6: 'Liver enzyme that handles about 1 in 5 common drugs — it activates codeine and tramadol, and clears many antidepressants, beta-blockers and tamoxifen.',
-    CYP2C19: 'Liver enzyme that activates the heart drug clopidogrel and clears stomach-acid drugs (omeprazole), several antidepressants and voriconazole.',
-    CYP2C9: 'Liver enzyme that clears warfarin, anti-inflammatory painkillers (ibuprofen, celecoxib) and phenytoin.',
-    CYP2B6: 'Liver enzyme that clears the HIV drug efavirenz, plus sertraline and methadone.',
-    CYP3A5: 'Partner of CYP3A4. Most Europeans don’t make it at all (that is the “poor” result) — it matters mainly for the transplant drug tacrolimus.',
-    CYP3A4: 'The busiest drug enzyme of all; genetic differences are small, so it rarely changes prescribing.',
-    CYP4F2: 'Recycles vitamin K; a minor input into warfarin dosing.',
-    VKORC1: 'The protein warfarin blocks. Its genotype is the biggest genetic factor in warfarin dose.',
-    SLCO1B1: 'A “door” that lets statins into the liver. Weak versions raise statin levels in muscle and the risk of muscle aches.',
-    ABCG2: 'A “pump” that pushes drugs and uric acid out of cells; affects rosuvastatin levels and allopurinol response.',
-    DPYD: 'Breaks down the chemotherapy drugs fluorouracil and capecitabine. Reduced activity can make standard doses toxic.',
-    TPMT: 'Inactivates thiopurine drugs (azathioprine, mercaptopurine) used for autoimmune disease and leukaemia.',
-    NUDT15: 'Second gene for thiopurine safety, alongside TPMT.',
-    UGT1A1: 'Clears bilirubin (Gilbert syndrome lives here) and the drugs irinotecan and atazanavir.',
-    NAT2: 'Acetylates drugs such as hydralazine and isoniazid. “Slow acetylators” are common worldwide.',
-    G6PD: 'Protects red blood cells from oxidative stress; deficiency makes some drugs (primaquine, rasburicase, dapsone) dangerous.',
-    RYR1: 'Calcium channel in muscle. Certain variants cause malignant hyperthermia with some anaesthetics.',
-    CACNA1S: 'Second malignant-hyperthermia gene, alongside RYR1.',
-    CFTR: 'The cystic-fibrosis gene. Only matters for choosing CF drugs such as ivacaftor.',
-    IFNL3: 'Immune-signalling gene that predicted response to an older hepatitis C treatment.',
-    'HLA-A': 'Immune-system “ID tag” gene. Specific versions predict severe skin reactions to carbamazepine.',
-    'HLA-B': 'Immune-system “ID tag” gene. Specific versions predict severe reactions to abacavir, allopurinol, carbamazepine and phenytoin.',
-    'MT-RNR1': 'Mitochondrial ribosome gene. Rare variants cause permanent hearing loss from aminoglycoside antibiotics.',
-  };
 
   // Enzyme "speed" scale for the gauge diagram.
   const SPEED = ['poor', 'intermediate', 'normal', 'rapid', 'ultrarapid'];
@@ -83,29 +61,49 @@
   const other = $derived(genes.filter((g) => !gauged.includes(g)));
   const untyped = $derived(genes.filter((g) => g.call_level === 'Not callable'));
 
-  // Drug list: group the per-source rows by drug. "Guidance differs" = a CPIC or DPWG guideline changes something.
+  // Drug list: group the per-source rows by drug. The bucket is the strongest CPIC/DPWG tier, decided in the
+  // pipeline from ClinPGx's curated flags (stages/pgx.py `tier`). FDA label rows are shown but never set the bucket.
   const GUIDE = new Set(['CPIC', 'DPWG']);
+  const RANK = ['none', 'standard', 'note', 'change'];
   const byDrug = $derived.by(() => {
     const out = new Map<string, Row[]>();
     for (const d of drugs) (out.get(d.drug) ?? out.set(d.drug, []).get(d.drug)!).push(d);
     return [...out.entries()].map(([drug, rows]) => {
-      const guide = rows.filter((r) => GUIDE.has(r.source) && r.matched);
-      const notes = rows.filter((r) => !r.matched);
-      const action = guide.some((r) => r.action);
+      const guideAll = rows.filter((r) => GUIDE.has(r.source));
+      const guide = guideAll.filter((r) => r.matched);
+      // No CPIC/DPWG guideline: an FDA label that matched you, else listed as "not for your result" (never hidden).
+      const tier = guideAll.length ? guideAll.reduce((t, r) => (RANK.indexOf(r.tier) > RANK.indexOf(t) ? r.tier : t), 'none')
+        : rows.some((r) => r.matched) ? 'fda' : 'none';
       const best = guide.find((r) => r.overall === 'Strong') ?? guide.find((r) => r.overall === 'Moderate') ?? guide[0];
-      return { drug, rows: rows.filter((r) => r.matched), guide, notes, action, genes: [...new Set(rows.flatMap((r) => r.genes ?? []))].sort(), overall: best?.overall ?? null };
+      // CPIC and DPWG reach different conclusions for your genotype (e.g. venlafaxine: "no action" vs "avoid").
+      const bySrc = new Map<string, string>();
+      for (const r of guide) bySrc.set(r.source, RANK.indexOf(r.tier) > RANK.indexOf(bySrc.get(r.source) ?? 'none') ? r.tier : bySrc.get(r.source)!);
+      const differ = bySrc.size > 1 && new Set(bySrc.values()).size > 1;
+      return { drug, tier, differ, rows: rows.filter((r) => r.matched), guide,
+        notes: rows.filter((r) => !r.matched && r.tier === 'note'), unmatched: rows.some((r) => r.matched || r.tier === 'note') ? [] : rows,
+        genes: [...new Set(rows.flatMap((r) => r.genes ?? []))].sort(), overall: best?.overall ?? null };
     });
   });
   const q = $derived(search.trim().toLowerCase());
   const match = (d: { drug: string; genes: string[] }) => !q || d.drug.toLowerCase().includes(q) || d.genes.some((g) => g.toLowerCase().includes(q));
-  const actionDrugs = $derived(byDrug.filter((d) => d.action && match(d)));
-  const standardDrugs = $derived(byDrug.filter((d) => d.guide.length && !d.action && match(d)));
-  const fdaOnly = $derived(byDrug.filter((d) => !d.guide.length && d.rows.length && match(d)));
-
-  // Guidelines that PharmCAT can't turn into a single sentence (it reports "see the flowchart"), summarised by hand.
-  const DRUG_NOTE: Record<string, (g: (n: string) => Row | undefined) => string> = {
-    warfarin: (g) => `CPIC doesn't give a fixed answer for warfarin; it gives a dosing calculator. For people of non-African ancestry it says: work out the starting dose with a validated pharmacogenetic algorithm (e.g. warfarindosing.org) using CYP2C9 and VKORC1, then, if you carry CYP4F2*3, consider a 5–10% higher dose. Your inputs: CYP2C9 ${g('CYP2C9')?.diplotype ?? '?'} (normal), VKORC1 −1639 G/G (${g('VKORC1')?.diplotype?.includes('reference') ? 'the least warfarin-sensitive type — typical-to-higher doses' : 'see gene card'}), CYP4F2 ${g('CYP4F2')?.diplotype ?? '?'}${g('CYP4F2')?.diplotype?.includes('*3') ? ' — a *3 carrier, so the calculator dose would be nudged up by 5–10%' : ''}. In short: no warning, but your genes point toward the usual-to-slightly-higher end of the dose range. Doses are always adjusted by blood tests (INR) anyway.`,
+  const inTier = (t: string) => byDrug.filter((d) => d.tier === t && match(d));
+  const actionDrugs = $derived(inTier('change'));
+  const noteDrugs = $derived(inTier('note'));
+  const standardDrugs = $derived(inTier('standard'));
+  const noneDrugs = $derived(inTier('none'));
+  const fdaOnly = $derived(inTier('fda'));
+  // Gene description: MedlinePlus (written for the public, expert-reviewed) first, else NCBI Gene's summary.
+  const aboutGene = (g: string) => {
+    const a = about[g];
+    if (a?.medlineplus_text) return { name: a.name, text: a.medlineplus_text, src: 'MedlinePlus Genetics', url: a.medlineplus_url, when: a.medlineplus_reviewed ? `reviewed ${a.medlineplus_reviewed}` : '', machine: false };
+    if (a?.ncbi_summary) {
+      const machine = !['RefSeq', 'OMIM'].includes(a.ncbi_summary_source);
+      return { name: a.name, text: a.ncbi_summary, src: `NCBI Gene (${a.ncbi_summary_source})`, url: a.ncbi_url, machine,
+        when: machine ? 'machine-generated from gene annotations; can describe unrelated functions' : `written by ${a.ncbi_summary_source} curators` };
+    }
+    return a?.name ? { name: a.name, text: '', src: 'NCBI Gene', url: a.ncbi_url, when: '', machine: false } : null;
   };
+  const firstPara = (t: string) => t.split(/\n/)[0];
 
   // Guideline text arrives as HTML fragments (lists, <br>, entities): turn it into plain text with bullets.
   function plain(html: string | null | undefined): string {
@@ -186,9 +184,17 @@
             </button>
             {#if open}
               <div class="gbody small">
-                <p>{ROLE[g.gene] ?? ''}</p>
+                {#if aboutGene(g.gene)}
+                  {@const ab = aboutGene(g.gene)!}
+                  {#if ab.name}<p><strong>{g.gene}</strong> = <em>{ab.name}</em></p>{/if}
+                  {#if ab.machine}
+                    <details><summary class="faint">Technical summary (machine-generated)</summary><p class="faint">{ab.text}</p></details>
+                  {:else if ab.text}<p>{firstPara(ab.text)}</p>{/if}
+                  {#if !ab.machine && firstPara(ab.text) !== ab.text}<details><summary class="faint">More about {g.gene}</summary><p class="rec">{ab.text.slice(firstPara(ab.text).length).trim()}</p></details>{/if}
+                  <p class="faint">From <a href={ab.url} target="_blank" rel="noreferrer">{ab.src} ↗</a>{ab.when ? ` · ${ab.when}` : ''}</p>
+                {/if}
                 {#if g.allele1_function || g.allele2_function}
-                  <p>Your two copies: <span class="mono">{g.allele1}</span> — {g.allele1_function ?? 'unknown function'}; <span class="mono">{g.allele2}</span> — {g.allele2_function ?? 'unknown function'}.
+                  <p>{#if g.allele2}Your two copies: <span class="mono">{g.allele1}</span> — {g.allele1_function ?? 'unknown function'}; <span class="mono">{g.allele2}</span> — {g.allele2_function ?? 'unknown function'}.{:else}Your version: <span class="mono">{g.allele1}</span> — {g.allele1_function ?? 'unknown function'}.{/if}
                     {#if g.activity_score && g.activity_score !== 'n/a'}<Term t="Activity score" /> <strong>{g.activity_score}</strong> (typical = 2).{/if}</p>
                 {/if}
                 <div class="row">
@@ -209,16 +215,16 @@
                   <p class="note">Called from your reads by <Term t="Cyrius" /> (it counts gene copies and resolves the look-alike CYP2D7 pseudogene). Copies of CYP2D6 found: <strong>{det.total_cn != null ? det.total_cn - 2 : '?'}</strong> (2 is typical). {#if det.warnings?.length}Caution: {det.warnings.join('; ')}.{' '}{/if}Cyrius was validated on Illumina data; yours is DNBSEQ, so call confidence is capped at Medium.</p>
                 {/if}
                 {#if g.gene.startsWith('HLA') && det}
-                  <p class="note">Typed from your reads by <Term t="T1K" /> against IPD-IMGT/HLA {det.imgt_hla}. PharmCAT only asks whether you carry the specific risk versions; you don’t.</p>
+                  <p class="note">Typed from your reads by <Term t="T1K" /> against IPD-IMGT/HLA {det.imgt_hla}. PharmCAT only checks for the specific risk versions named in guidelines. Your result: {g.phenotype}.</p>
                 {/if}
                 {#if g.gene === 'MT-RNR1' && det}
-                  <p class="note">Read from your mitochondrial variants ({(det.callable_fraction * 100).toFixed(0)}% of the gene readable). None of the known aminoglycoside-hearing-loss variants is present.</p>
+                  <p class="note">Read from your mitochondrial variants ({(det.callable_fraction * 100).toFixed(0)}% of the gene readable). Result: {det.call}{det.function ? ` — ${det.function}` : ''}.{#if det.variants_in_gene?.length}{' '}Other variants in the gene (not linked to drug response): {det.variants_in_gene.map((v: any) => v.name).join(', ')}.{/if}</p>
                 {/if}
                 {#if g.messages?.length}
                   <details><summary class="faint">PharmCAT notes ({g.messages.length})</summary>{#each g.messages as msg}<p class="faint">{msg}</p>{/each}</details>
                 {/if}
                 {#if g.related_drugs?.length}
-                  <p>Related drugs: {#each g.related_drugs.slice(0, 30) as d, k}<button class="link" onclick={() => { search = d; openDrug = d; }}>{d}</button>{k < Math.min(g.related_drugs.length, 30) - 1 ? ', ' : ''}{/each}{#if g.related_drugs.length > 30}<span class="faint"> and {g.related_drugs.length - 30} more — search below.</span>{/if}</p>
+                  <p>Related drugs: {#each g.related_drugs.slice(0, 30) as d, k}<button class="link" onclick={() => { search = d; openDrug = d; }}>{d}</button>{k < Math.min(g.related_drugs.length, 30) - 1 ? ', ' : ''}{/each}{#if g.related_drugs.length > 30}<span class="faint">{' '}and {g.related_drugs.length - 30} more — search below.</span>{/if}</p>
                 {/if}
                 <button class="link" onclick={() => go('variants', g.gene)}>Browse your variants in {g.gene} →</button>
               </div>
@@ -238,12 +244,16 @@
     <Card title="Medicines" subtitle="Every published guideline that matches your genotypes">
       <div class="row search">
         <input type="search" placeholder="Search a drug or gene (e.g. codeine, CYP2C19)" bind:value={search} aria-label="Search drugs" />
-        <span class="small faint">{actionDrugs.length} with different guidance · {standardDrugs.length} standard</span>
+        <span class="small faint">{actionDrugs.length} different · {noteDrugs.length} worth knowing · {standardDrugs.length} standard</span>
       </div>
 
       <h4>⚠️ Guidance differs for you <span class="faint small">({actionDrugs.length})</span></h4>
-      <p class="small muted">A guideline recommends a different dose, a different drug, or extra monitoring for someone with your genes.</p>
+      <p class="small muted">A guideline recommends a different dose or a different drug for someone with your genes.</p>
       {@render drugList(actionDrugs, 'No matching drugs.')}
+
+      <h4 class="mt">📝 Worth knowing <span class="faint small">({noteDrugs.length})</span></h4>
+      <p class="small muted">No change by default, but the guideline adds advice — monitoring, what to do if the drug doesn’t work, or a dose calculator.</p>
+      {@render drugList(noteDrugs, 'No matching drugs.')}
 
       <h4 class="mt"><button class="link big" onclick={() => (showStandard = !showStandard)}>{showStandard ? '▾' : '▸'} ✓ Standard guidance <span class="faint small">({standardDrugs.length})</span></button></h4>
       {#if showStandard || q}{@render drugList(standardDrugs, 'No matching drugs.')}{:else}<p class="small muted">Guidelines exist and say “use as normal” for your genotype. Reassuring, and still worth knowing.</p>{/if}
@@ -251,6 +261,11 @@
       {#if fdaOnly.length}
         <h4 class="mt"><button class="link big" onclick={() => (showFda = !showFda)}>{showFda ? '▾' : '▸'} 🏷️ Mentioned only on FDA labels <span class="faint small">({fdaOnly.length})</span></button></h4>
         {#if showFda || q}{@render drugList(fdaOnly, 'No matching drugs.')}{:else}<p class="small muted">The US drug label mentions one of these genes, but no CPIC or DPWG guideline exists. Weaker, and not graded.</p>{/if}
+      {/if}
+
+      {#if noneDrugs.length}
+        <h4 class="mt"><button class="link big" onclick={() => (showNone = !showNone)}>{showNone ? '▾' : '▸'} ∅ Guideline exists, but not for your result <span class="faint small">({noneDrugs.length})</span></button></h4>
+        {#if showNone || q}{@render drugList(noneDrugs, 'No matching drugs.')}{:else}<p class="small muted">A guideline or FDA label covers this drug, but only for genotypes you don’t have (for example a risk version you don’t carry, or G6PD deficiency).</p>{/if}
       {/if}
 
       <Explain title="Where the advice comes from, and how it is graded" learn="How this project grades">
@@ -289,7 +304,8 @@
             <span class="dname">{d.drug}</span>
             <span class="mono faint small">{d.genes.join(' · ')}</span>
             <span class="spacer"></span>
-            {#if d.notes.length || DRUG_NOTE[d.drug]}<span class="pill soon" title="Has a guideline note — open for details">📝 note</span>{/if}
+            {#if d.differ}<span class="pill warn" title="The US (CPIC) and Dutch (DPWG) panels reach different conclusions for your genotype — open to compare. The bucket follows the more cautious one.">⚖️ guidelines differ</span>{/if}
+            {#if d.notes.length}<span class="pill soon" title="Has a guideline note — open for details">📝 note</span>{/if}
             {#if d.overall}<span class="pill {OVERALL_PILL[d.overall]}">{d.overall}</span>{/if}
           </button>
           {#if open}
@@ -314,7 +330,11 @@
                   {#each r.messages as msg}<p class="rec">{plain(msg)}</p>{/each}
                 </div>
               {/each}
-              {#if DRUG_NOTE[d.drug]}<p class="note">{DRUG_NOTE[d.drug](geneRow)}</p>{/if}
+              {#each d.unmatched as r}
+                <div class="src">
+                  <div class="row"><span class="pill">{r.source}</span><span class="faint">no recommendation for your genotype</span><span class="spacer"></span>{#if r.url}<a href={r.url} target="_blank" rel="noreferrer">source ↗</a>{/if}</div>
+                </div>
+              {/each}
               {#each d.genes as gname}
                 {@const gr = geneRow(gname)}
                 {#if gr}<button class="link" onclick={() => { openGene = gname; document.getElementById(`gene-${gname}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Your {gname}: {gr.diplotype ?? '—'} ({gr.phenotype}) →</button><br />{/if}

@@ -93,6 +93,10 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [REVEL](https://sites.google.com/site/revelgenomics/) | Missense damage prediction | Free for non-commercial use |
 | [PharmCAT](https://pharmcat.clinpgx.org/) 3.4 (CPIC, DPWG and FDA guidance via [ClinPGx](https://www.clinpgx.org/)) | Star-allele calling and prescribing guidelines | MPL-2.0 tool; ClinPGx data CC BY-SA 4.0 |
 | [IPD-IMGT/HLA](https://www.ebi.ac.uk/ipd/imgt/hla/) | HLA allele sequences for T1K | CC BY-ND 4.0 |
+| [MedlinePlus Genetics](https://medlineplus.gov/genetics/) | Plain-language gene descriptions (about 1,500 genes) | Public domain (NLM) |
+| [NCBI Gene](https://www.ncbi.nlm.nih.gov/gene) | Official gene names and summaries for genes MedlinePlus doesn't cover | Public domain (NCBI) |
+
+Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
 
 AlphaMissense and REVEL are licensed for non-commercial use, which this personal project is. The downloaded files stay in `wgs-data/knowledge/` and are never committed to the repo.
 

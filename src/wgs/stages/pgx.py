@@ -466,14 +466,6 @@ def _pgx(ctx: Context) -> dict:
 
 SOURCE_LABEL = {"CPIC Guideline Annotation": "CPIC", "DPWG Guideline Annotation": "DPWG",
                 "FDA Label Annotation": "FDA label", "FDA PGx Association": "FDA association"}
-NORMAL = re.compile(r"^(normal|.*negative|n/a)", re.I)
-STANDARD = re.compile(r"^(use .* per standard|initiate therapy with (standard )?(recommended )?(starting )?dose|"
-                      r"initiate standard dosing|use ([\w-]+ )?label recommended|no recommendation|"
-                      r"it is not possible to (offer|provide)|"
-                      r"prescribe desired starting dose|no adjustments? needed|no reason to avoid|"
-                      r"there is no need to avoid|label recommended|no action|"
-                      r"the guideline does not provide a recommendation|"
-                      r"clinical findings, family history, further genetic testing)", re.I)
 NO_RESULT = {"No Result", "n/a", "Indeterminate", ""}
 GENOTYPE_ONLY = "Genotype reported (guidelines use it directly)"
 
@@ -483,9 +475,24 @@ PHENO_CLASS = [("poor", "Poor"), ("intermediate", "Intermediate"), ("ultrarapid"
                ("indeterminate", "Indeterminate"), ("risk", "Risk")]
 
 
-def is_standard(rec: str) -> bool:
-    """True when a recommendation just says "use as normal" (a leading "For PAIN:"-style scope is ignored)."""
-    return bool(STANDARD.search(re.sub(r"^for [a-z ,]+:\s*", "", rec.strip(), flags=re.I)))
+TIER_LABEL = {"change": "Guidance differs for you", "note": "Worth knowing", "standard": "Standard use",
+              "none": "No guidance for your result"}
+
+
+def tier(annotation: dict, rec: str, cf_only: bool = False) -> str:
+    """How much a guideline row changes things for you, from ClinPGx's curated flags (never from the wording).
+
+    change   - the guideline changes the dose or suggests a different drug (dosingInformation / alternateDrugAvailable)
+    note     - no change by default, but other advice applies (monitoring, "if it doesn't work, switch")
+    standard - prescribe as usual
+    """
+    if not rec or cf_only or (annotation.get("classification") or "").lower() == "no recommendation":
+        return "standard"
+    if annotation.get("dosingInformation") or annotation.get("alternateDrugAvailable"):
+        return "change"
+    if annotation.get("otherPrescribingGuidance"):
+        return "note"
+    return "standard"
 
 
 def _pheno_class(phenotype: str) -> str:
@@ -592,21 +599,22 @@ def write_tables(ctx: Context, report: dict, calls: list[dict], oc: dict, versio
                                                                       for k in (lk or {})})
                     phenos = [f"{k}: {v}" for lk in a.get("lookupKey") or [] for k, v in (lk or {}).items()]
                     rec = (a.get("drugRecommendation") or "").strip()
-                    normal = all(NORMAL.match(str(v)) for lk in a.get("lookupKey") or [] for v in (lk or {}).values())
                     # CFTR guidance only applies to people who have cystic fibrosis; reference CFTR is not a finding.
                     cf_only = gene_list == ["CFTR"] and all("Reference" in (dp.get("label") or "") for dp in dips)
-                    action = bool(rec) and not cf_only and not is_standard(rec) and (
-                        a.get("dosingInformation") or a.get("alternateDrugAvailable") or not normal)
+                    msgs = [m.get("message") for m in (a.get("messages") or ([] if rec else d.get("messages"))
+                                                       or []) if m.get("message")][:5]
+                    # No recommendation but drug-level advice (e.g. CPIC warfarin "use the dosing flowchart").
+                    t = tier(a, rec, cf_only) if rec else ("note" if msgs and src in ("CPIC", "DPWG") else "none")
                     drug_rows.append({
                         "drug": name, "drug_id": d.get("id"), "source": src, "guideline": gl.get("name"),
                         "url": gl.get("url") or (d.get("urls") or [None])[0], "genes": gene_list,
                         "phenotypes": phenos, "diplotypes": sorted({dp.get("label") for dp in dips}),
                         "population": a.get("population"), "classification": a.get("classification"),
                         "recommendation": rec or None, "implications": a.get("implications") or [],
-                        "action": action, "matched": bool(rec),
-                        # Unmatched rows (e.g. CPIC warfarin: "use the flowchart") carry their advice as drug notes.
-                        "messages": [m.get("message") for m in (a.get("messages") or ([] if rec else d.get("messages"))
-                                                                 or []) if m.get("message")][:5],
+                        "tier": t, "action": t == "change", "matched": bool(rec),
+                        "flags": [k for k in ("dosingInformation", "alternateDrugAvailable",
+                                              "otherPrescribingGuidance") if a.get(k)],
+                        "messages": msgs,
                         "citations": json.dumps([{"pmid": c.get("pmid"), "title": c.get("title"), "year": c.get("year")}
                                                  for c in d.get("citations") or []][:6]),
                     })
@@ -614,7 +622,9 @@ def write_tables(ctx: Context, report: dict, calls: list[dict], oc: dict, versio
                     drug_rows.append({"drug": name, "drug_id": d.get("id"), "source": src, "guideline": gl.get("name"),
                                       "url": gl.get("url"), "genes": [], "phenotypes": [], "diplotypes": [],
                                       "population": None, "classification": None, "recommendation": None,
-                                      "implications": [], "action": False, "matched": False,
+                                      "implications": [],
+                                      "tier": "note" if d.get("messages") and src in ("CPIC", "DPWG") else "none",
+                                      "action": False, "matched": False, "flags": [],
                                       "messages": [m.get("message") for m in d.get("messages") or []][:5],
                                       "citations": "[]"})
     cpic_genes = {g for r in drug_rows if r["source"] == "CPIC" for g in r["genes"]}
@@ -686,11 +696,11 @@ def write_tables(ctx: Context, report: dict, calls: list[dict], oc: dict, versio
         levels = [gene_level.get(g, "Not callable") for g in r["genes"]] or ["Not callable"]
         call = min(levels, key=ev.CALL.index)
         evidence, ev_reasons = _cpic_evidence(r["classification"], r["source"])
-        r_id = f"pgx:drug:{r['source']}:{r['drug']}:{r['population'] or ''}"
+        r_id = f"pgx:drug:{r['source']}:{r['drug']}:{'+'.join(r['genes'])}:{r['population'] or ''}"
         claims.append({
             "claim_id": r_id, "section": "pgx", "group": "pgx_drug", "kind": "pgx_drug",
-            "category": "action" if r["action"] else "standard",
-            "category_label": "Guidance differs for you" if r["action"] else "Standard use",
+            "category": "action" if r["tier"] == "change" else r["tier"],
+            "category_label": TIER_LABEL[r["tier"]],
             "subject": r["drug"], "gene": ", ".join(r["genes"]) or None, "genotype": "; ".join(r["phenotypes"]),
             "conditions": r["population"],
             "statement": f"{r['source']}: {r['recommendation']}", "evidence_level": evidence,
@@ -766,7 +776,7 @@ def _pgx_inputs(ctx: Context) -> list[Path]:
 
 
 PGX = Stage(
-    name="pgx", version="2", title="Medicines: PharmCAT diplotypes, phenotypes and guidelines", fn=_pgx,
+    name="pgx", version="3", title="Medicines: PharmCAT diplotypes, phenotypes and guidelines", fn=_pgx,
     inputs=_pgx_inputs, outputs=lambda ctx: [out_paths(ctx)["summary"], out_paths(ctx)["claims"]],
     available=_pgx_available,
 )

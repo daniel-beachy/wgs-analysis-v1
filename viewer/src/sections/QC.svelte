@@ -32,7 +32,7 @@
 
   const load = $derived(Promise.all([
     loadDoc(m, 'qc'), loadDoc(m, 'coverage'), loadDoc(m, 'alignment_stats'), loadDoc(m, 'fastq_stats'),
-    loadDoc(m, 'reference_full'), loadDoc(m, 'inventory'), loadDoc(m, 'sections'),
+    loadDoc(m, 'reference_full'), loadDoc(m, 'inventory'), loadDoc(m, 'sections'), loadDoc(m, 'checks'),
   ]));
 
   let bins = $state<{ chrom: string; start: number; depth: number }[]>([]);
@@ -49,7 +49,7 @@
 
 {#await load}
   <p class="muted">Loading QC…</p>
-{:then [qc, cov, aln, fq, full, inv, sections]}
+{:then [qc, cov, aln, fq, full, inv, sections, selfc]}
   {#if !qc}
     <Card title="No QC results yet"><p>Run <code>pixi run wgs run</code> to compute data-quality checks.</p></Card>
   {:else}
@@ -234,6 +234,23 @@
         </Explain>
       </Card>
 
+      {#if selfc}
+        {@const ok = selfc.counts.fail + selfc.counts.error === 0}
+        <Card title={`Self-checks: ${selfc.counts.pass} of ${selfc.checks.length} passed`} subtitle="Automatic consistency checks run on this release’s own results before it is published — they catch bugs, not biology.">
+          <ul class="selfc small">
+            {#each selfc.checks as c}
+              <li class={c.status}>
+                <span class="pill {c.status === 'pass' ? 'pass' : c.status === 'skipped' ? 'soon' : 'fail'}">{c.status === 'pass' ? '✓' : c.status === 'skipped' ? '–' : '✗'} {c.status}</span>
+                <span><strong>{c.title}</strong> <span class="muted">— {c.why}</span>
+                  {#if c.status === 'fail'}<br /><span class="warn">{c.count} problem{c.count > 1 ? 's' : ''}: {c.examples.join(', ')}{c.count > c.examples.length ? '…' : ''}</span>{/if}
+                  {#if c.detail}<br /><span class="faint">{c.detail}</span>{/if}</span>
+              </li>
+            {/each}
+          </ul>
+          {#if !ok}<p class="small warn">Some checks failed: results they mention may be shown wrongly. Re-run the pipeline after updating, or report it.</p>{/if}
+        </Card>
+      {/if}
+
       {#if inv}
         <Card title="Input files found" subtitle="The pipeline finds files by content, not by name or folder; sections adapt to whatever is present.">
           <table class="small">
@@ -254,6 +271,8 @@
 {/await}
 
 <style>
+  .selfc { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .selfc li { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: start; }
   .hero { display: flex; gap: 18px; align-items: flex-start; padding: 22px; border-radius: 16px; border: 1px solid var(--border);
     background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 12%, var(--panel)), var(--panel)); }
   .hero.allpass { background: linear-gradient(135deg, color-mix(in srgb, var(--good) 14%, var(--panel)), var(--panel)); }

@@ -29,10 +29,11 @@ import duckdb
 
 from .. import __version__
 from .. import evidence as ev
+from ..checks import run as run_checks
 from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
-from ..pipeline import CANONICAL, Context, Stage, write_json
+from ..pipeline import CANONICAL, Context, Stage, console, write_json
 from . import annotate, coverage, genotypes, pgx, qc, reads, reference, variants
 
 SCHEMA = 1
@@ -155,6 +156,31 @@ def _acmg_sql(ctx: Context) -> str:
     GROUP BY a.gene, a.category ORDER BY a.category, a.gene"""
 
 
+def _gene_about_in(ctx: Context) -> list[Path]:
+    st = Store(ctx.cfg)
+    src = [st.table("medlineplus", "medlineplus_genes"), st.table("ncbi_gene", "ncbi_genes")]
+    if not all(src):
+        return []
+    return src + _claims_in(ctx) + [p for p in [pgx.out_paths(ctx)["genes"]] if p.exists()]
+
+
+def _gene_about_sql(ctx: Context) -> str:
+    mp, ncbi, *mine = _gene_about_in(ctx)
+    wanted = " UNION ".join([f"SELECT gene FROM '{mp}'"] + [f"SELECT gene FROM '{p}'" for p in mine])
+    return f"""
+    WITH w AS (SELECT DISTINCT gene FROM ({wanted}) WHERE gene IS NOT NULL AND gene <> ''),
+         n AS (SELECT * FROM '{ncbi}' QUALIFY row_number() OVER (PARTITION BY gene ORDER BY summary IS NULL,
+                                                                  try_cast(ncbi_id AS BIGINT)) = 1)
+    SELECT w.gene, coalesce(m.name, n.name) AS name,
+           m.function AS medlineplus_text, m.url AS medlineplus_url, m.reviewed AS medlineplus_reviewed,
+           m.conditions AS medlineplus_conditions,
+           n.summary AS ncbi_summary, n.summary_source AS ncbi_summary_source, n.ncbi_id,
+           CASE WHEN n.ncbi_id IS NOT NULL THEN 'https://www.ncbi.nlm.nih.gov/gene/' || n.ncbi_id END AS ncbi_url
+    FROM w LEFT JOIN '{mp}' m USING (gene) LEFT JOIN n USING (gene)
+    WHERE m.gene IS NOT NULL OR n.gene IS NOT NULL
+    ORDER BY w.gene"""
+
+
 TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context], str], str]] = [
     # name, transform version, inputs, sql, description
     ("variants", "1", lambda c: [variants.variants_parquet(c)] + ([genotypes.out_path(c)]
@@ -173,6 +199,8 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
     ("acmg_genes", "1", _acmg_in, _acmg_sql,
      "ACMG secondary-findings genes checked, with how much of each gene region was callable in your data"),
     ("genes", "1", _genes_in, _genes_sql, "Ensembl gene coordinates (GRCh37) for searching by gene name"),
+    ("gene_about", "1", _gene_about_in, _gene_about_sql,
+     "What each gene does, in words: MedlinePlus Genetics plain-language summary, else the NCBI RefSeq summary"),
     ("pgx_genes", "1", lambda c: [pgx.out_paths(c)["genes"]], _pgx_sql("genes"),
      "Medicines: your diplotype, phenotype and call confidence for each pharmacogene (PharmCAT + outside callers)"),
     ("pgx_drugs", "1", lambda c: [pgx.out_paths(c)["drugs"]], _pgx_sql("drugs"),
@@ -268,7 +296,13 @@ def build(ctx: Context) -> dict:
         key = _key(name, hashlib.sha256(src.read_bytes()).hexdigest())
         documents[name] = _put_object(rd, name, key, src.suffix.lstrip("."),
                                       lambda dest, s=src: shutil.copyfile(s, dest))
-    for name, payload in (("inventory", _inventory(ctx)), ("sections", evaluate(ctx.inv, ctx.cfg))):
+    checks = run_checks({k: rd / v["path"] for k, v in tables.items()})
+    for c in checks["checks"]:
+        if c["status"] in ("fail", "error"):
+            detail = c.get("examples") or c.get("detail")
+            console.print(f"[yellow]  self-check {c['status']}: {c['title']} — {detail}[/]")
+    for name, payload in (("inventory", _inventory(ctx)), ("sections", evaluate(ctx.inv, ctx.cfg)),
+                          ("checks", checks)):
         text = json.dumps(payload, indent=1, default=str)
         documents[name] = _put_object(rd, name, _key(name, text), "json", lambda dest, t=text: dest.write_text(t))
 
@@ -320,7 +354,7 @@ def _available(ctx: Context) -> str | None:
 
 STAGE = Stage(
     name="publish",
-    version="2",
+    version="5",
     title="Publish a dashboard release",
     fn=build,
     inputs=_input_paths,
