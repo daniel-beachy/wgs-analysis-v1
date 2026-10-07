@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 
-MODEL_VERSION = "2"
+MODEL_VERSION = "3"
 
 EVIDENCE = ["Limited", "Moderate", "Strong"]
 CALL = ["Not callable", "Low", "Medium", "High"]
@@ -241,3 +241,59 @@ def predicted_evidence(*, consequence: str | None, am_score: float | None, revel
     reasons.append("Computer prediction only: no lab or expert has classified this variant, so it is capped at "
                    "Limited evidence")
     return PREDICTED_CAP, reasons
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Model 3: common-variant associations and polygenic scores (ADR-017)
+# ---------------------------------------------------------------------------------------------------------------
+
+GENOME_WIDE_MLOG10P = 7.3          # p < 5e-8, the conventional genome-wide significance threshold
+PGS_MIN_MATCH = 0.75               # pgsc_calc default: below this the score is not computed
+PGS_HIGH_MATCH = 0.9
+PGS_MODERATE_IND_PUBS, PGS_MODERATE_IND_N = 2, 20_000
+
+
+def gwas_evidence(*, publications: int | None, mlog10p: float | None,
+                  direction_known: bool) -> tuple[str, list[str]]:
+    """How solid is a single-variant GWAS association? Replication across publications is what counts."""
+    pubs = int(publications or 0)
+    reasons = [f"Reported by {pubs} publication{'s' if pubs != 1 else ''} in the GWAS Catalog"]
+    level = "Strong" if pubs >= 3 else "Moderate" if pubs == 2 else "Limited"
+    if mlog10p is not None and mlog10p < GENOME_WIDE_MLOG10P:
+        level = "Limited"
+        reasons.append("Strongest result is below genome-wide significance (p ≥ 5×10⁻⁸)")
+    elif mlog10p is not None:
+        reasons.append(f"Strongest result p ≈ 10^-{mlog10p:.0f} (genome-wide significant)")
+    if not direction_known:
+        level = "Limited"
+        reasons.append("The catalog does not record which allele has the effect, so your genotype cannot be read "
+                       "as higher or lower")
+    reasons.append("A common variant nudges a trait; it does not decide it")
+    return level, reasons
+
+
+def pgs_evidence(*, independent_pubs: int | None, independent_n: int | None,
+                 evaluated_n: int | None) -> tuple[str, list[str]]:
+    """How well tested is a polygenic score? Never Strong: a score shifts odds, it never diagnoses."""
+    ip, inn = int(independent_pubs or 0), int(independent_n or 0)
+    if ip >= PGS_MODERATE_IND_PUBS and inn >= PGS_MODERATE_IND_N:
+        level = "Moderate"
+        reasons = [f"Independently tested by {ip} other research groups in {inn:,} people"]
+    elif ip >= 1:
+        level = "Limited"
+        reasons = [f"Independently tested by {ip} other research group{'s' if ip != 1 else ''} in {inn:,} people"]
+    else:
+        level = "Limited"
+        reasons = ["Only tested by the team that built it" + (f" ({int(evaluated_n):,} people)" if evaluated_n
+                                                               else "")]
+    reasons.append("Polygenic scores shift the odds by modest amounts and are capped below Strong")
+    return level, reasons
+
+
+def pgs_call(*, match_rate: float | None, passed: bool | None) -> tuple[str, list[str]]:
+    """How completely we could compute the score from your genome."""
+    if not passed or match_rate is None or match_rate < PGS_MIN_MATCH:
+        pct = f"{match_rate:.0%}" if match_rate is not None else "too few"
+        return "Not callable", [f"Only {pct} of the score's variants could be matched (need ≥ {PGS_MIN_MATCH:.0%})"]
+    level = "High" if match_rate >= PGS_HIGH_MATCH else "Medium"
+    return level, [f"{match_rate:.1%} of the score's variants matched your genome and the reference panel"]

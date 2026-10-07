@@ -62,7 +62,7 @@ pixi run wgs run --only qc        # a single stage
 pixi run wgs run --force coverage # recompute one stage
 ```
 
-Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth), `qc` and `publish`. Working files go to `wgs-data/work/<sample>/`. `publish` then writes a dated, read-only **release** to `wgs-data/releases/` — that is all the dashboard reads.
+Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `reference` (rebuild and verify the CRAM reference), `fastq_stats`, `alignment_stats`, `coverage` (mosdepth), `qc`, the interpretation stages (`annotate`, `claims`, `cyp2d6`, `hla`, `pgx`, `traits`, `pgs`) and `publish`. Working files go to `wgs-data/work/<sample>/`. `publish` then writes a dated, read-only **release** to `wgs-data/releases/` — that is all the dashboard reads.
 
 ## Keeping the knowledge current
 
@@ -95,6 +95,10 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [IPD-IMGT/HLA](https://www.ebi.ac.uk/ipd/imgt/hla/) | HLA allele sequences for T1K | CC BY-ND 4.0 |
 | [MedlinePlus Genetics](https://medlineplus.gov/genetics/) | Plain-language gene descriptions (about 1,500 genes) | Public domain (NLM) |
 | [NCBI Gene](https://www.ncbi.nlm.nih.gov/gene) | Official gene names and summaries for genes MedlinePlus doesn't cover | Public domain (NCBI) |
+| [GWAS Catalog](https://www.ebi.ac.uk/gwas/) | Single-variant trait associations (featured list) | EMBL-EBI open data |
+| [PGS Catalog](https://www.pgscatalog.org/) | Polygenic scores, their publications and independent evaluations | EMBL-EBI open data; per-score licence recorded |
+| [1000 Genomes reference panel](https://ftp.ebi.ac.uk/pub/databases/spot/pgs/resources/) (PGS Catalog build) | Ancestry-matched percentiles for polygenic scores (≈ 7 GB download) | Open access |
+| [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
 
@@ -126,5 +130,9 @@ Each dashboard section declares the inputs it **requires** and the inputs that *
 ### Medicines (pharmacogenomics)
 
 `wgs run` includes three stages: `cyp2d6` (Cyrius, about 20 minutes, from the CRAM), `hla` (T1K, a few minutes) and `pgx` (PharmCAT, about 2 minutes). Cyrius needs its own Python environment, installed once with `pixi install -e cyrius`. T1K is installed for Apple Silicon only. On other machines, run [Cyrius](https://github.com/Illumina/Cyrius) or [T1K](https://github.com/mourisl/T1K) yourself and put the outputs (a Cyrius `.tsv` with "cyrius" or "cyp2d6" in its name; T1K's `*_genotype.tsv`) in the WGS folder; they are picked up automatically. Without either, PharmCAT still runs and reports *CYP2D6*/HLA as not typed. Design: [ADR-015](docs/DECISIONS.md).
+
+### Traits, polygenic scores and Brain & mind
+
+`traits` (seconds) reads featured single-variant traits and rare variants in SFARI genes. `pgs` computes polygenic score percentiles the way the PGS Catalog's pgsc_calc does, with `pgscatalog-utils` and `plink2` from a separate environment (`pixi install -e pgs`, macOS and Linux). It needs the `pgs_catalog` and `pgs_reference` knowledge sources. The first run takes 2–3 hours on a 16 GB laptop (reference QC, score normalising and reference-panel scores are cached afterwards, so re-runs take minutes) and needs about 10 GB of temporary space on the internal disk. Without the `pgs` environment the Traits page still shows the single-variant traits. Design: [ADR-017](docs/DECISIONS.md).
 
 See [docs/DECISIONS.md](docs/DECISIONS.md) for why things are built this way.

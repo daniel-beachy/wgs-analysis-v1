@@ -8,10 +8,11 @@
   import { sectionFor } from '../lib/learn';
   import Card from '../components/Card.svelte';
   import ClaimList from '../components/ClaimList.svelte';
+  import PgsList from '../components/PgsList.svelte';
   import Explain from '../components/Explain.svelte';
   import Term from '../components/Term.svelte';
 
-  let { m, def }: { m: Manifest; def: SectionDef } = $props();
+  let { m, def, sex }: { m: Manifest; def: SectionDef; sex?: string } = $props();
 
   let genes = $state<Row[]>([]);
   let acmgClaims = $state<Row[]>([]);
@@ -124,9 +125,14 @@
 
   <Card title="5 · Risk factors" subtitle="Common variants with small, documented effects on risk">
     <ClaimList {m} section="health" groups={['risk']} limit={12} empty="No risk-factor variants found." />
-    <Explain title="Small effects add up — polygenic scores come in step 6" learn="Risk numbers">
-      <p>Each risk factor shifts risk only a little, and most common diseases depend on thousands of variants plus lifestyle. Step 6 adds <Term t="Polygenic risk score" label="polygenic risk scores" />, which combine many variants into a percentile — a much better summary than any single entry here.</p>
+    <Explain title="Small effects add up" learn="Risk numbers">
+      <p>Each risk factor shifts risk only a little, and most common diseases depend on thousands of variants plus lifestyle. The <Term t="Polygenic risk score" label="polygenic scores" /> below combine many variants into one percentile — a much better summary than any single entry here.</p>
     </Explain>
+  </Card>
+
+  <Card title="6 · Polygenic risk scores" subtitle="Your percentile for common diseases and health measures, against the 1000 Genomes reference people most similar to you. Click a score for details.">
+    <PgsList {m} section="health" {sex} empty="Polygenic scores were not computed for this release." />
+    <p class="small faint">A percentile is a tendency, not a forecast: lifestyle, family history and chance usually matter as much or more. Brain-related scores are on the <button class="link inline" onclick={() => go('brain')}>Brain &amp; mind</button> page.</p>
   </Card>
 
   {#if Object.keys(counts).length}

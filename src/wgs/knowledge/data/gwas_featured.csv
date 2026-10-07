@@ -1,0 +1,16 @@
+rsid,mapped_trait,label,section,body_system
+rs12913832,eye color,Eye colour (HERC2/OCA2 switch),traits,eyes
+rs12203592,eye color,Eye colour (IRF4),traits,eyes
+rs1805007,hair color,Red hair (MC1R),traits,hair
+rs12203592,freckles,Freckles (IRF4),traits,skin
+rs1126809,sunburn,Sunburn (TYR),traits,skin
+rs1426654,skin pigmentation,Skin pigmentation (SLC24A5),traits,skin
+rs11803731,strand of hair shape,Hair shape (TCHH),traits,hair
+rs3827760,strand of hair shape,Hair shape (EDAR),traits,hair
+rs4988235,lactase-phlorizin hydrolase measurement,Lactase enzyme level (milk digestion),traits,gut
+rs10246939,sensory perception of bitter taste,Bitter taste perception (TAS2R38),traits,mouth
+rs2472297,coffee consumption measurement,Coffee drinking (CYP1A1/CYP1A2),traits,liver
+rs671,alcohol consumption quality,Alcohol drinking (ALDH2),traits,liver
+rs1229984,alcohol drinking,Alcohol drinking (ADH1B),traits,liver
+rs1533426,autosomal dominant compelling helio-ophthalmic outburst syndrome,Sneezing at bright light (photic sneeze),traits,brain
+rs66800491,motion sickness,Motion sickness,traits,ears

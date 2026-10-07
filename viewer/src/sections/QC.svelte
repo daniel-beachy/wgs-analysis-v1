@@ -42,6 +42,14 @@
       .then((r) => (bins = r.rows as any));
   });
 
+  type Calib = { kind: string; band: number; panel_af_band: string; sites: number; hom_ref_pct: number; het_pct: number; hom_alt_pct: number; missing_pct: number; your_af: number; panel_af: number };
+  let calib = $state<Calib[]>([]);
+  $effect(() => {
+    if (!m.tables.pgs_genotype_qc) return;
+    useRelease(m).then(() => query("SELECT * FROM pgs_genotype_qc ORDER BY kind = 'indel', band"))
+      .then((r) => (calib = r.rows as any));
+  });
+
   const fmtBp = (v: number) => `${(v / 1e6).toFixed(0)} Mb`;
   const subColor = (s: string) => (['A>G', 'G>A', 'C>T', 'T>C'].includes(s) ? 'var(--accent)' : 'var(--accent-2)');
   const chromLabel = (c: string) => (c === 'MT' ? 'M' : c);
@@ -216,6 +224,27 @@
         {/if}
       </div>
 
+      {#if calib.length}
+        <Card title="Genotype calibration" subtitle="Your genotypes at the ~millions of positions used for polygenic scores, against how common each variant is in 1000 Genomes.">
+          <table class="small">
+            <thead><tr><th>type</th><th>variant in panel</th><th class="num">sites</th><th class="num">you: none</th><th class="num">one copy</th><th class="num">two copies</th><th class="num">not callable</th><th class="num">your frequency</th><th class="num">panel</th></tr></thead>
+            <tbody>
+              {#each calib as r}
+                <tr class:alarm={r.band === 6 && r.hom_ref_pct > 2}>
+                  <td>{r.kind}</td><td>{r.panel_af_band}</td><td class="num">{compact(r.sites)}</td>
+                  <td class="num">{r.hom_ref_pct.toFixed(1)}%</td><td class="num">{r.het_pct.toFixed(1)}%</td><td class="num">{r.hom_alt_pct.toFixed(1)}%</td>
+                  <td class="num faint">{r.missing_pct.toFixed(1)}%</td><td class="num">{r.your_af != null ? pct(r.your_af) : '—'}</td><td class="num faint">{pct(r.panel_af)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          <Explain>
+            <p>A single person’s genotypes should roughly follow population frequencies: where more than 99% of people carry a variant, you should almost never be called as not carrying it. A high “you: none” share in that last band would mean genotypes are being read wrongly — this once caught an indel bug, and the self-check <em>Genotype calibration</em> now guards it on every run.</p>
+            <p>“Not callable” positions (common for insertions/deletions described differently by different tools) are left out of your score and filled with the population average, as the PGS Catalog’s own pipeline does.</p>
+          </Explain>
+        </Card>
+      {/if}
+
       <Card title="Reference genome proof" subtitle="The CRAM can only be decoded with the exact reference it was made with.">
         {@const r = qc.sections.reference}
         <p>The reference was <strong>{r?.origin ?? 'located'}</strong>, then checked against fingerprints stored inside your CRAM file.</p>
@@ -283,4 +312,5 @@
   .why { margin: 10px 0 0; }
   h4 { font-size: 0.9rem; margin: 6px 0; color: var(--muted); font-weight: 600; }
   td.num { white-space: nowrap; }
+  tr.alarm td { color: var(--warn); font-weight: 600; }
 </style>

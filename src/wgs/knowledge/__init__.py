@@ -55,6 +55,7 @@ class Source:
     cadence: str = ""                  # how often upstream changes, for display
     description: str = ""
     schema: int = 1                    # bump when build() output changes, so stored versions are rebuilt
+    workspace: Path = Path(".")        # set by refresh(); lets a build reuse files in <workspace>/cache
 
     def probe(self, pin: str | None = None) -> list[Upstream]:
         raise NotImplementedError
@@ -170,6 +171,7 @@ def refresh(cfg: Config, scratch: Path, only: list[str] | None = None, pin: dict
         if only and src.id not in only:
             continue
         p = (pin or {}).get(src.id)
+        src.workspace = cfg.workspace
         try:
             up = src.probe(p)
             cur = store.current(src.id)

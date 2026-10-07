@@ -70,6 +70,44 @@ CHECKS: list[Check] = [
     Check("pgx.gene_called_has_level", "Every medicine gene states how sure the call is",
           "A diplotype without a confidence level reads as certain.", ("pgx_genes",),
           "SELECT gene FROM pgx_genes WHERE call_level IS NULL OR evidence_level IS NULL"),
+    Check("traits.lift_sane", "Trait variants sit at their GRCh37 positions",
+          "A wrong genome-build lift would read a different base; rs12913832 (eye colour) is a fixed landmark.",
+          ("trait_snps",),
+          """SELECT rsid || ' at ' || chrom || ':' || pos FROM trait_snps
+             WHERE rsid = 'rs12913832' AND NOT (chrom = '15' AND pos = 28365618)
+             UNION ALL SELECT 'rs12913832 missing' WHERE NOT EXISTS
+                 (SELECT 1 FROM trait_snps WHERE rsid = 'rs12913832')"""),
+    Check("traits.graded", "Every trait variant has an evidence grade and call confidence",
+          "Ungraded rows read as certain.", ("trait_snps",),
+          "SELECT rsid FROM trait_snps WHERE evidence_level IS NULL OR call_confidence IS NULL OR overall IS NULL"),
+    Check("traits.direction_unknown_limited", "A variant with no known effect allele is never graded above Limited",
+          "Without the effect allele your genotype cannot be read as higher or lower.", ("trait_snps",),
+          "SELECT rsid FROM trait_snps WHERE NOT direction_known AND evidence_level <> 'Limited'"),
+    Check("pgs.match_rate", "Every scored polygenic score matched at least 75% of its variants",
+          "Below this, the score is mostly filled-in averages and its percentile is meaningless (pgsc_calc rule).",
+          ("pgs_scores",),
+          """SELECT pgs_id || ' (' || coalesce(round(100 * match_rate, 1)::VARCHAR, '?') || '%)' FROM pgs_scores
+             WHERE call_confidence <> 'Not callable' AND (match_rate IS NULL OR match_rate < 0.75)"""),
+    Check("pgs.percentile_range", "Every percentile lies between 0 and 100",
+          "A percentile outside 0–100 means the adjustment step misread its input.", ("pgs_scores",),
+          "SELECT pgs_id FROM pgs_scores WHERE percentile IS NOT NULL AND (percentile < 0 OR percentile > 100)"),
+    Check("pgs.featured_scored", "Every featured polygenic score produced a percentile",
+          "A featured trait shown without a result would be a silent gap.", ("pgs_scores",),
+          "SELECT pgs_id || ' ' || label FROM pgs_scores WHERE featured AND percentile IS NULL"),
+    Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
+          "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
+          "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "
+          "such indels, biasing every score.", ("pgs_genotype_qc",),
+          """SELECT kind || ': ' || round(hom_ref_pct, 1) || '% called reference' FROM pgs_genotype_qc
+             WHERE band = 6 AND sites >= 100 AND hom_ref_pct > 2"""),
+    Check("pgs.score_spread", "Across all scores, your z-scores look like one person's",
+          "One genome's z-scores over many unrelated scores should average near 0 with spread near 1; a shifted "
+          "or squeezed set points to a systematic genotyping or scaling error rather than biology.", ("pgs_scores",),
+          """SELECT 'mean z ' || round(avg(z), 2) || ', SD ' || round(stddev(z), 2) FROM pgs_scores
+             WHERE z IS NOT NULL HAVING count(*) >= 20 AND (abs(avg(z)) > 0.5 OR stddev(z) NOT BETWEEN 0.6 AND 1.5)"""),
+    Check("pgs.never_strong", "Polygenic scores are never graded Strong",
+          "A score shifts odds modestly; it is capped below Strong by the evidence model.", ("pgs_scores",),
+          "SELECT pgs_id FROM pgs_scores WHERE evidence_level = 'Strong' OR overall = 'Strong'"),
 ]
 
 

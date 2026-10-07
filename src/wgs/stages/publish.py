@@ -34,7 +34,7 @@ from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, console, write_json
-from . import annotate, coverage, genotypes, pgx, qc, reads, reference, variants
+from . import annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, traits, variants
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -122,6 +122,24 @@ def _pgx_sql(key: str) -> Callable[[Context], str]:
     return lambda ctx: f"SELECT * FROM '{pgx.out_paths(ctx)[key]}'"
 
 
+def _file_sql(path: Callable[[Context], Path], order: str = "") -> Callable[[Context], str]:
+    return lambda ctx: f"SELECT * FROM '{path(ctx)}' {order}"
+
+
+def _pgs_evals_in(ctx: Context) -> list[Path]:
+    p = Store(ctx.cfg).table("pgs_catalog", "evaluations")
+    pubs = Store(ctx.cfg).table("pgs_catalog", "publications")
+    return [pgs.out_scores(ctx), p, pubs] if p and pubs else []
+
+
+def _pgs_evals_sql(ctx: Context) -> str:
+    scores, ev_, pubs = _pgs_evals_in(ctx)
+    return f"""SELECT e.*, p.first_author, p.title, p.journal, p.published, p.pmid, p.doi
+        FROM '{ev_}' e LEFT JOIN '{pubs}' p USING (pgp_id)
+        WHERE e.pgs_id IN (SELECT pgs_id FROM '{scores}')
+        ORDER BY e.pgs_id, e.independent DESC, e.n DESC NULLS LAST"""
+
+
 def _genes_in(ctx: Context) -> list[Path]:
     if not annotate.annotations_path(ctx).exists():
         return []
@@ -207,6 +225,18 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Medicines: every drug guideline/label PharmCAT matched against your genotypes (CPIC, DPWG, FDA)"),
     ("pgx_positions", "1", lambda c: [pgx.out_paths(c)["positions"]], _pgx_sql("positions"),
      "Medicines: how each PharmCAT-defined position was genotyped from your data (and why if missing)"),
+    ("trait_snps", "1", lambda c: [traits.out_snps(c)], _file_sql(traits.out_snps),
+     "Traits: well-replicated single-variant associations (GWAS Catalog), your genotype and how common it is"),
+    ("brain_variants", "1", lambda c: [traits.out_brain(c)], _file_sql(traits.out_brain),
+     "Brain & mind: your rare protein-changing variants in SFARI Gene brain-development genes"),
+    ("pgs_scores", "1", lambda c: [pgs.out_scores(c)], _file_sql(pgs.out_scores),
+     "Polygenic scores: your ancestry-adjusted percentile for each selected PGS Catalog score, with grades"),
+    ("pgs_evaluations", "1", _pgs_evals_in, _pgs_evals_sql,
+     "Polygenic scores: every published evaluation of the selected scores (effect sizes, cohorts, ancestry)"),
+    ("pgs_ancestry", "1", lambda c: [pgs.out_ancestry(c)], _file_sql(pgs.out_ancestry),
+     "Genetic-ancestry PCA: you projected onto the 1000 Genomes reference panel, with population similarity"),
+    ("pgs_genotype_qc", "1", lambda c: [pgs.out_genotype_qc(c)], _file_sql(pgs.out_genotype_qc),
+     "Polygenic scores: your genotype calls at scored sites vs how common each allele is (a calibration check)"),
 ]
 
 
@@ -220,6 +250,8 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "annotate": annotate.summary_path(ctx),
         "pgx": pgx.out_paths(ctx)["summary"],
         "pgx_report": pgx.out_paths(ctx)["report"],
+        "traits": traits.out_summary(ctx),
+        "pgs": pgs.out_summary(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 
@@ -236,8 +268,9 @@ def _knowledge(ctx: Context, annotated: bool) -> dict:
         return {"versions": {}, "evidence_model": None, "sources": {}}
     summary = json.loads(annotate.summary_path(ctx).read_text())
     used = dict(summary.get("knowledge", {}))
-    if pgx.out_paths(ctx)["summary"].exists():
-        used.update(json.loads(pgx.out_paths(ctx)["summary"].read_text()).get("knowledge", {}))
+    for p in (pgx.out_paths(ctx)["summary"], traits.out_summary(ctx), pgs.out_summary(ctx)):
+        if p.exists():
+            used.update(json.loads(p.read_text()).get("knowledge", {}))
     idx = Store(ctx.cfg).index()["sources"]
     sources = {}
     for sid, ver in used.items():
@@ -354,7 +387,7 @@ def _available(ctx: Context) -> str | None:
 
 STAGE = Stage(
     name="publish",
-    version="5",
+    version="6",
     title="Publish a dashboard release",
     fn=build,
     inputs=_input_paths,

@@ -80,6 +80,12 @@ SELECT * FROM doc_changes;
 | `pgx_drugs` | one guideline row for a drug (CPIC / DPWG / FDA) | `tier`: `change` (dose or drug differs), `note` (extra advice, e.g. monitoring), `standard`, `none` (no advice for this genotype), set from ClinPGx's curated flags (`flags`); only CPIC/DPWG rows set a drug's bucket; `recommendation` is HTML; FDA rows are ungraded |
 | `gene_about` | one gene: plain-language description | `medlineplus_text` (public-facing, reviewed) else `ncbi_summary` (`ncbi_summary_source`: RefSeq/OMIM are curated, others machine-written). Use it to explain what a gene does. |
 | `pgx_positions` | one PharmCAT defining position, lifted to GRCh38 | `status`: reference / variant / not_callable / low_quality / no_call |
+| `trait_snps` | one featured single-variant trait (GWAS Catalog) | `genotype`, `effect_allele`, `effect_copies`, `effect_text` (per-copy effect, from the Catalog), `genotype_share` (share of people with your genotype), grades |
+| `pgs_scores` | one polygenic score (PGS Catalog) | `percentile` within `compared_with` (closest 1000 Genomes super-population), `match_rate`, `eval_effect` (best evaluation), `evidence_level` (never Strong), `call_confidence`, `overall`; `section` = health / brain / traits, or empty for browse-only scores |
+| `pgs_evaluations` | one published evaluation of a scored PGS | effect sizes (OR/HR/AUROC/…), sample, ancestry, whether independent |
+| `pgs_ancestry` | one person (you = `self`, plus 1000 Genomes) | PCs and most-similar population used for percentiles |
+| `pgs_genotype_qc` | one variant type × panel-frequency band | how often your genotype says "no variant" where the 1000 Genomes panel says the variant is common — a calibration check on the target genotypes |
+| `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 
@@ -143,7 +149,11 @@ The release also has a `checks` document (`checks.json`): automatic self-checks.
 11. **Neurodiversity- and disability-respectful language.** Describe variation
     and support needs, not "defects". Old candidate-gene associations (e.g.
     CNTNAP2 SNPs and autism) mostly failed to replicate; say so.
-12. **Knowledge changes.** Mention the knowledge versions (`sources`,
+12. **Polygenic percentiles are tendencies.** Most people sit between the
+    10th and 90th percentile. Quote the score's evaluation (`eval_effect`) and
+    its ancestry, and for brain/education scores mention confounding by family
+    environment. Never present a percentile as a diagnosis.
+13. **Knowledge changes.** Mention the knowledge versions (`sources`,
     `doc_knowledge`) and that `wgs knowledge refresh` + `wgs run` will update
     them, with differences recorded in `doc_changes`.
 

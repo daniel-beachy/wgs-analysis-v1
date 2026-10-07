@@ -26,6 +26,7 @@ pandas = ">=3.0.6,<4"
 nodejs = ">=26.10.0,<26.11"
 go = ">=1.27.1,<2"
 slivar = ">=0.3.3"
+zstandard = ">=0.25.0,<0.26"
 
 [pypi-dependencies]
 wgs = { path = ".", editable = true }
@@ -48,8 +49,22 @@ numpy = ">=1.26"
 [feature.cyrius.pypi-dependencies]
 cyrius = ">=1.1.1, <2"
 
+# Polygenic scores: the PGS Catalog's own tools (matching, ancestry adjustment) and plink2 for
+# scoring. FRAPOSA (projection onto the reference PCA) pins pandas < 2 while pgscatalog-utils
+# pins pandas 2.2, so, as in the official pgsc_calc containers, each gets its own environment.
+[feature.pgs.dependencies]
+python = "3.12.*"
+pgscatalog-utils = ">=2.0.4,<3"
+plink2 = ">=2.00a5"
+
+[feature.fraposa.dependencies]
+python = "3.11.*"
+fraposa-pgsc = ">=1.0.2"
+
 [environments]
 cyrius = { features = ["cyrius"], no-default-feature = true }
+pgs = { features = ["pgs"], no-default-feature = true }
+fraposa = { features = ["fraposa"], no-default-feature = true }
 
 [tasks]
 wgs = "python -m wgs"

@@ -12,6 +12,8 @@
   import Health from './sections/Health.svelte';
   import Carrier from './sections/Carrier.svelte';
   import Medicines from './sections/Medicines.svelte';
+  import Traits from './sections/Traits.svelte';
+  import Brain from './sections/Brain.svelte';
 
   const PORTFOLIO = 'https://daniel-beachy.github.io';
   let theme = $state(localStorage.getItem('theme') ?? 'dark');
@@ -71,8 +73,10 @@
   {:else if def.id === 'sql'}<Sql {m} />
   {:else if def.id === 'learn'}<Learn {theme} />
   {:else if def.id === 'pgx' && m.tables.pgx_genes}<Medicines {m} {def} />
-  {:else if def.id === 'health' && m.tables.claims}<Health {m} {def} />
+  {:else if def.id === 'health' && m.tables.claims}<Health {m} {def} {sex} />
   {:else if def.id === 'carrier' && m.tables.claims}<Carrier {m} {def} />
+  {:else if def.id === 'traits' && (m.tables.trait_snps || m.tables.pgs_scores)}<Traits {m} {def} {sex} />
+  {:else if def.id === 'brain' && (m.tables.brain_variants || m.tables.pgs_scores)}<Brain {m} {def} {sex} />
   {:else}<Upcoming {def} {m} status={sections.find((x) => x.id === (def.module ?? def.id))} />
   {/if}
 </main>

@@ -241,6 +241,22 @@ N = working copy, c = altered copy. Overall: 25% unaffected, 50% carriers, 25% a
 - **Penetrance:** the chance that someone with the variant actually develops the condition. *Complete* is close to 100%; *reduced* might be 20–60%.
 - **Expressivity:** how severe it is when it does show up.
 
+### Polygenic scores and percentiles
+
+A **polygenic score** (PGS, or PRS when it is about disease risk) is a recipe published by a research team: a list of variants, and for each one a weight. Your score is the sum of the weights for the alleles you carry. On its own the number means nothing. It only makes sense compared with other people, so the tool:
+
+1. **Finds your genetic neighbours.** Your genome is placed on the same map (principal components) as the 2,500 people of the 1000 Genomes Project, and the reference group you sit closest to (European, African, East Asian, South Asian or admixed American) is picked.
+2. **Scores everyone the same way** — you and every reference person — using only variants found in both.
+3. **Reports your percentile** within that group: the 80th percentile means your score is higher than 80% of them. Scores differ between ancestry groups for technical reasons, so comparing with the wrong group would mislead.
+
+How to read the result:
+
+- **Most people sit between the 10th and 90th percentile.** That is the normal range, not "low" or "high" risk.
+- **A score is a tendency, not a forecast.** The best disease scores raise or lower the odds by a factor of 1.5–3 at the extremes. Lifestyle, family history and chance usually matter as much.
+- **Scores work best in the ancestry they were built in** — still mostly European.
+- **Grades:** the evidence grade depends on whether *other* research groups have tested the score, and in how many people; it is capped at Moderate. Your call is graded on how many of the score's variants could be read in your data (below 75% the score is not computed).
+- **Single-variant traits** (eye colour, milk digestion, alcohol flush) are different: one variant with a large, replicated effect. Their evidence grade comes from how many publications report the link.
+
 ### Classifying a single variant (ACMG/AMP)
 
 Clinical labs use a five-level scale, built from many types of evidence (population frequency, predicted effect, family studies, lab experiments):

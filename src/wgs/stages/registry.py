@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import annotate, coverage, genotypes, pgx, publish, qc, reads, reference, variants
+from . import annotate, coverage, genotypes, pgs, pgx, publish, qc, reads, reference, traits, variants
 
 STAGES = [
     variants.STAGE,
@@ -17,5 +17,7 @@ STAGES = [
     pgx.CYRIUS,
     pgx.HLA,
     pgx.PGX,
+    traits.STAGE,
+    pgs.STAGE,
     publish.STAGE,
 ]
