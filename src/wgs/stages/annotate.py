@@ -469,7 +469,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
             "call_level": c_level, "call_reasons": c_reasons,
             "overall": ev.overall(e_level, c_level),
             "alt_is_major": major is not None,
-            "sensitive": disease_like or gene in SENSITIVE_GENES or bool(acmg),
+            # Gene-level sensitivity (e.g. APOE → Alzheimer's) only for disease topics, not drug-response entries.
+            "sensitive": disease_like or bool(acmg) or (gene in SENSITIVE_GENES and cls != "drug_response"),
             "sources": json.dumps(sources),
         })
     _compound_hets(claims, kb)
@@ -663,7 +664,7 @@ def _statement(cls: str, conditions: str, copies: int, role: str | None, r: dict
 
 
 STAGE = Stage(
-    name="annotate", version="4", title="Annotate with knowledge sources and grade claims", fn=build,
+    name="annotate", version="5", title="Annotate with knowledge sources and grade claims", fn=build,
     inputs=_inputs,
     outputs=lambda ctx: [annotations_path(ctx), claims_path(ctx), summary_path(ctx)],
     available=_available,

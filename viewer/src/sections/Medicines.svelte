@@ -32,7 +32,8 @@
       try {
         await useRelease(m);
         genes = (await query('SELECT * FROM pgx_genes ORDER BY gene')).rows;
-        drugs = (await query('SELECT * FROM pgx_drugs WHERE matched ORDER BY drug, source')).rows;
+        drugs = (await query(`SELECT * FROM pgx_drugs WHERE matched OR (source IN ('CPIC', 'DPWG') AND len(messages) > 0)
+          ORDER BY drug, matched DESC, source`)).rows;
       } catch (e) { error = String(e); }
       loaded = true;
     })();
@@ -88,17 +89,23 @@
     const out = new Map<string, Row[]>();
     for (const d of drugs) (out.get(d.drug) ?? out.set(d.drug, []).get(d.drug)!).push(d);
     return [...out.entries()].map(([drug, rows]) => {
-      const guide = rows.filter((r) => GUIDE.has(r.source));
+      const guide = rows.filter((r) => GUIDE.has(r.source) && r.matched);
+      const notes = rows.filter((r) => !r.matched);
       const action = guide.some((r) => r.action);
       const best = guide.find((r) => r.overall === 'Strong') ?? guide.find((r) => r.overall === 'Moderate') ?? guide[0];
-      return { drug, rows, guide, action, genes: [...new Set(rows.flatMap((r) => r.genes ?? []))].sort(), overall: best?.overall ?? null };
+      return { drug, rows: rows.filter((r) => r.matched), guide, notes, action, genes: [...new Set(rows.flatMap((r) => r.genes ?? []))].sort(), overall: best?.overall ?? null };
     });
   });
   const q = $derived(search.trim().toLowerCase());
   const match = (d: { drug: string; genes: string[] }) => !q || d.drug.toLowerCase().includes(q) || d.genes.some((g) => g.toLowerCase().includes(q));
   const actionDrugs = $derived(byDrug.filter((d) => d.action && match(d)));
   const standardDrugs = $derived(byDrug.filter((d) => d.guide.length && !d.action && match(d)));
-  const fdaOnly = $derived(byDrug.filter((d) => !d.guide.length && match(d)));
+  const fdaOnly = $derived(byDrug.filter((d) => !d.guide.length && d.rows.length && match(d)));
+
+  // Guidelines that PharmCAT can't turn into a single sentence (it reports "see the flowchart"), summarised by hand.
+  const DRUG_NOTE: Record<string, (g: (n: string) => Row | undefined) => string> = {
+    warfarin: (g) => `CPIC doesn't give a fixed answer for warfarin; it gives a dosing calculator. For people of non-African ancestry it says: work out the starting dose with a validated pharmacogenetic algorithm (e.g. warfarindosing.org) using CYP2C9 and VKORC1, then, if you carry CYP4F2*3, consider a 5–10% higher dose. Your inputs: CYP2C9 ${g('CYP2C9')?.diplotype ?? '?'} (normal), VKORC1 −1639 G/G (${g('VKORC1')?.diplotype?.includes('reference') ? 'the least warfarin-sensitive type — typical-to-higher doses' : 'see gene card'}), CYP4F2 ${g('CYP4F2')?.diplotype ?? '?'}${g('CYP4F2')?.diplotype?.includes('*3') ? ' — a *3 carrier, so the calculator dose would be nudged up by 5–10%' : ''}. In short: no warning, but your genes point toward the usual-to-slightly-higher end of the dose range. Doses are always adjusted by blood tests (INR) anyway.`,
+  };
 
   // Guideline text arrives as HTML fragments (lists, <br>, entities): turn it into plain text with bullets.
   function plain(html: string | null | undefined): string {
@@ -264,7 +271,7 @@
       </Card>
     </div>
 
-    <Card title="Single-variant drug-response entries (ClinVar)" subtitle="Secondary: individual variants ClinVar lists as affecting a drug response. The gene-level results above are the better guide.">
+    <Card title="Single-variant drug-response entries (ClinVar)" subtitle="Secondary: single variants ClinVar links to a drug response, many from older research studies. 0★ means a submitter gave no review criteria, so it is graded Limited — a lead, not a finding. The gene-level results above are what prescribers use.">
       <ClaimList {m} section="pgx" groups={['drug_response']} limit={10} empty="No ClinVar drug-response variants." />
     </Card>
   {/if}
@@ -282,6 +289,7 @@
             <span class="dname">{d.drug}</span>
             <span class="mono faint small">{d.genes.join(' · ')}</span>
             <span class="spacer"></span>
+            {#if d.notes.length || DRUG_NOTE[d.drug]}<span class="pill soon" title="Has a guideline note — open for details">📝 note</span>{/if}
             {#if d.overall}<span class="pill {OVERALL_PILL[d.overall]}">{d.overall}</span>{/if}
           </button>
           {#if open}
@@ -300,9 +308,16 @@
                   {#if r.implications?.length}<p class="faint">Why: {r.implications.map(plain).join(' ')}</p>{/if}
                 </div>
               {/each}
+              {#each d.notes as r}
+                <div class="src">
+                  <div class="row"><span class="pill">{r.source}</span><span class="faint">note — no single recommendation</span><span class="spacer"></span>{#if r.url}<a href={r.url} target="_blank" rel="noreferrer">source ↗</a>{/if}</div>
+                  {#each r.messages as msg}<p class="rec">{plain(msg)}</p>{/each}
+                </div>
+              {/each}
+              {#if DRUG_NOTE[d.drug]}<p class="note">{DRUG_NOTE[d.drug](geneRow)}</p>{/if}
               {#each d.genes as gname}
                 {@const gr = geneRow(gname)}
-                {#if gr}<button class="link" onclick={() => { openGene = gname; document.getElementById(`gene-${gname}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Your {gname}: {gr.diplotype ?? '—'} ({gr.phenotype}) →</button> {/if}
+                {#if gr}<button class="link" onclick={() => { openGene = gname; document.getElementById(`gene-${gname}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Your {gname}: {gr.diplotype ?? '—'} ({gr.phenotype}) →</button><br />{/if}
               {/each}
             </div>
           {/if}

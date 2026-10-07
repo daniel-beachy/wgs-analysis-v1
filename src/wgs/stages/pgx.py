@@ -604,7 +604,9 @@ def write_tables(ctx: Context, report: dict, calls: list[dict], oc: dict, versio
                         "population": a.get("population"), "classification": a.get("classification"),
                         "recommendation": rec or None, "implications": a.get("implications") or [],
                         "action": action, "matched": bool(rec),
-                        "messages": [m.get("message") for m in a.get("messages") or []][:5],
+                        # Unmatched rows (e.g. CPIC warfarin: "use the flowchart") carry their advice as drug notes.
+                        "messages": [m.get("message") for m in (a.get("messages") or ([] if rec else d.get("messages"))
+                                                                 or []) if m.get("message")][:5],
                         "citations": json.dumps([{"pmid": c.get("pmid"), "title": c.get("title"), "year": c.get("year")}
                                                  for c in d.get("citations") or []][:6]),
                     })
@@ -764,7 +766,7 @@ def _pgx_inputs(ctx: Context) -> list[Path]:
 
 
 PGX = Stage(
-    name="pgx", version="1", title="Medicines: PharmCAT diplotypes, phenotypes and guidelines", fn=_pgx,
+    name="pgx", version="2", title="Medicines: PharmCAT diplotypes, phenotypes and guidelines", fn=_pgx,
     inputs=_pgx_inputs, outputs=lambda ctx: [out_paths(ctx)["summary"], out_paths(ctx)["claims"]],
     available=_pgx_available,
 )
