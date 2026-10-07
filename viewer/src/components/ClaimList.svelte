@@ -126,6 +126,13 @@
                     {#if r.acmg_sf}<p><strong><Term t="ACMG SF" label="ACMG secondary-findings gene" /></strong> ({r.acmg_sf}). Labs that sequence genomes report P/LP variants in this gene even when not asked{r.acmg_rule && r.acmg_rule !== 'Any P/LP' ? ` — rule for this gene: ${r.acmg_rule}` : ''}.
                       {r.acmg_reportable ? 'This finding meets that rule, so a clinical lab would report it.' : 'This finding does not meet that rule, so a clinical lab would not report it as a secondary finding.'}</p>{/if}
                     {#if act}<p><strong><Term t="Actionability" label="ClinGen actionability" /></strong>: {act.score}/12 ({act.context.toLowerCase()} context) — {act.intervention?.toLowerCase()} to address {act.outcome?.toLowerCase()}. <a href={act.url} target="_blank" rel="noreferrer">Report</a></p>{/if}
+                    {#if (act?.penetrance || act?.penetrance_note) && (r.role === 'affected' || r.role === 'possible') && /pathogenic/i.test(r.clinvar_significance ?? '') && !/conflict/i.test(r.clinvar_significance ?? '')}
+                      {#if act.penetrance}
+                        <p><strong>How often it leads to disease:</strong> ClinGen’s expert panel puts the chance of {act.penetrance.outcome?.toLowerCase() ?? 'the outcome'} for people with a disease-causing genotype in {r.gene} at <strong>{act.penetrance.text}</strong> (likelihood score {act.penetrance.code}: {act.penetrance.evidence}). <a href={act.penetrance.url} target="_blank" rel="noreferrer">ClinGen report</a></p>
+                      {:else}
+                        <p><strong>How often it leads to disease:</strong> not established for {r.gene} — {act.penetrance_note}. <a href={act.url} target="_blank" rel="noreferrer">ClinGen report</a></p>
+                      {/if}
+                    {/if}
                   </div>
                 {/if}
                 {#if r.am_score != null || r.revel != null || r.loeuf != null}
@@ -140,7 +147,7 @@
                   <div><div class="faint">Why this evidence grade</div><ul>{#each r.evidence_reasons ?? [] as x}<li>{x}</li>{/each}</ul></div>
                   <div><div class="faint">Why this call confidence</div><ul>{#each r.call_reasons ?? [] as x}<li>{x}</li>{/each}</ul></div>
                   <div><div class="faint">About the variant</div><ul>
-                    <li>{consequenceLabel(r.consequence)}{r.aa_change ? ` (${aaShort(r.aa_change)})` : ''}{r.impact ? ` · ${r.impact.toLowerCase()} impact` : ''}</li>
+                    <li>{consequenceLabel(r.consequence)}{r.aa_change ? ` (${aaShort(r.aa_change)})` : ''}{r.impact ? ` · ${r.impact.toLowerCase()} impact` : ''}{r.transcript ? ` · on ${r.refseq ?? r.transcript} (${r.transcript_basis ?? 'transcript'})` : ''}</li>
                     {#if r.inheritance}<li>Inheritance: {r.inheritance.split('/').map((x: string) => INH[x] ?? x).join(', ')}{r.inheritance_basis === 'gene' ? ' (from the gene’s known diseases)' : ''}{r.gene_validity ? ` · gene–disease link: ${r.gene_validity}` : ''}</li>{/if}
                     <li>Frequency: {r.af_1kg != null ? `${pct(r.af_1kg)} of chromosomes (1000 Genomes)` : 'not in 1000 Genomes'}{r.gnomad_popmax_af != null ? ` · up to ${pct(r.gnomad_popmax_af)} in a gnomAD population` : ''}</li>
                   </ul></div>

@@ -23,6 +23,7 @@ from pathlib import Path
 import duckdb
 
 from .. import evidence as ev
+from .. import hgvs
 from .. import inheritance as inh
 from ..interpret import Kb
 from ..knowledge import Store
@@ -77,6 +78,7 @@ def _knowledge(ctx: Context) -> dict[str, Path | None]:
     gn = s.table("gnomad", "fields")
     return {
         "genes": s.table("ensembl", "genes"),
+        "mane": s.table("mane", "transcripts"),
         "gff": (s.table("ensembl", "genes").parent / "annotation.gff3.gz") if s.table("ensembl", "genes") else None,
         "clinvar": s.table("clinvar", "variants"),
         "clinvar_subs": s.table("clinvar", "submissions"),
@@ -199,7 +201,13 @@ def build(ctx: Context) -> dict:
     con.execute("CREATE TEMP TABLE chrmap(raw VARCHAR, chrom VARCHAR)")
     con.executemany("INSERT INTO chrmap VALUES (?, ?)", [[a, b] for a, b in rev.items()])
     rank = "CASE t " + " ".join(f"WHEN '{t}' THEN {r}" for t, r in CSQ_RANK.items()) + " ELSE 0 END"
-    # One row per allele with the most severe consequence over all transcripts (protein-coding preferred).
+    mane = (f"'{k['mane']}'" if k["mane"] else
+            "(SELECT NULL::VARCHAR transcript, NULL::VARCHAR status, NULL::VARCHAR refseq WHERE false)")
+    # One row per allele, described on the gene's MANE Select transcript (the clinical standard, so protein names
+    # match ClinVar and papers) when it has one; otherwise the most severe consequence over all transcripts.
+    score = ("(CASE mane WHEN 'MANE Select' THEN 2 WHEN 'MANE Plus Clinical' THEN 1 ELSE 0 END) * 1000 "
+             "+ r * 10 + (biotype = 'protein_coding')::INT")
+    con.create_function("hgvs_p", hgvs.protein, ["VARCHAR", "VARCHAR"], "VARCHAR", null_handling="special")
     con.execute(f"""
       CREATE TEMP TABLE csq AS
       WITH e AS (
@@ -210,16 +218,19 @@ def build(ctx: Context) -> dict:
       ), s AS (
         SELECT chrom, pos, ref, alt, ltrim(f[1], '*') AS csq, f[2] AS gene, f[3] AS transcript, f[4] AS biotype,
                f[6] AS aa_change, f[7] AS dna_change,
-               list_max(list_transform(string_split(ltrim(f[1], '*'), '&'), t -> {rank})) AS r
-        FROM p
+               list_max(list_transform(string_split(ltrim(f[1], '*'), '&'), t -> {rank})) AS r,
+               mn.status AS mane, mn.refseq
+        FROM p LEFT JOIN {mane} mn ON mn.transcript = f[3]
       )
       SELECT chrom, pos, ref, alt,
-             arg_max(csq, r * 10 + (biotype = 'protein_coding')::INT) AS consequence,
-             arg_max(gene, r * 10 + (biotype = 'protein_coding')::INT) AS gene,
-             arg_max(transcript, r * 10 + (biotype = 'protein_coding')::INT) AS transcript,
-             arg_max(nullif(aa_change, ''), r * 10 + (biotype = 'protein_coding')::INT) AS aa_change,
-             arg_max(nullif(dna_change, ''), r * 10 + (biotype = 'protein_coding')::INT) AS dna_change,
-             max(r) AS r,
+             arg_max(csq, {score}) AS consequence,
+             arg_max(gene, {score}) AS gene,
+             arg_max(transcript, {score}) AS transcript,
+             arg_max(nullif(aa_change, ''), {score}) AS aa_change,
+             arg_max(nullif(dna_change, ''), {score}) AS dna_change,
+             arg_max(mane, {score}) AS transcript_basis,
+             arg_max(refseq, {score}) AS refseq,
+             arg_max(r, {score}) AS r,
              list_distinct(list(gene) FILTER (WHERE gene <> '')) AS genes
       FROM s GROUP BY ALL""")
     # slivar writes -1 when gnomAD has no value for an allele: that is "unknown", not "ultra-rare"
@@ -243,11 +254,13 @@ def build(ctx: Context) -> dict:
                "clinvar_conditions, cv.low_penetrance AS clinvar_low_penetrance, cv.conflicting_detail AS "
                "clinvar_conflicts, cv.rsid AS clinvar_rsid, " +
                ("cv.condition_ids AS clinvar_condition_ids" if "condition_ids" in _columns(cv)
-                else "NULL::VARCHAR AS clinvar_condition_ids")) if cv else \
+                else "NULL::VARCHAR AS clinvar_condition_ids") +
+               ", cv.genes AS clinvar_genes, cv.molecular_consequences AS clinvar_consequences") if cv else \
         ("NULL::BIGINT clinvar_id, NULL::VARCHAR clinvar_significance, NULL::VARCHAR clinvar_class, "
          "NULL::INT clinvar_stars, NULL::VARCHAR clinvar_review, NULL::VARCHAR clinvar_conditions, "
          "NULL::BOOLEAN clinvar_low_penetrance, NULL::VARCHAR clinvar_conflicts, NULL::VARCHAR clinvar_rsid, "
-         "NULL::VARCHAR clinvar_condition_ids")
+         "NULL::VARCHAR clinvar_condition_ids, NULL::VARCHAR[] clinvar_genes, "
+         "NULL::VARCHAR[] clinvar_consequences")
     kg = k["kg"]
     kg_join = f"LEFT JOIN '{kg}' kg USING (chrom, pos, ref, alt)" if kg else ""
     kg_cols = ("kg.af AS af_1kg, kg.afr AS af_1kg_afr, kg.amr AS af_1kg_amr, kg.eas AS af_1kg_eas, "
@@ -280,8 +293,9 @@ def build(ctx: Context) -> dict:
                nullif(v.vcf_id, '.')) AS rsid,
                v.ref, v.alt, v.vtype, v.filter, v.gt, v.zygosity, v.gq, v.dp, v.vaf,
                c.gene, c.genes, {csq_col} AS consequence, {IMPACT_SQL.replace('r >=', 'c.r >=')} AS impact,
-               c.transcript,
-               c.aa_change, c.dna_change,
+               c.transcript, coalesce(c.transcript_basis, CASE WHEN c.transcript IS NOT NULL
+                 THEN 'most severe transcript' END) AS transcript_basis, c.refseq,
+               hgvs_p(c.aa_change, c.consequence) AS aa_change, c.dna_change,
                {cv_cols}, {kg_cols}, {gn_cols}, {rs_cols}, {", ".join(pred_cols)}
         FROM '{vp}' v
         LEFT JOIN csq c USING (chrom, pos, ref, alt)
@@ -347,7 +361,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
     claims = []
     for r, predicted in [(r, False) for r in rows] + [(r, True) for r in predicted_rows]:
         r = {key: (None if _isnan(val) else val) for key, val in r.items()}
-        gene = r["gene"] or (r["genes"][0] if r.get("genes") is not None and len(r["genes"]) else None)
+        gene = r["gene"] or next((g for col in ("genes", "clinvar_genes") if r.get(col) is not None
+                                  for g in r[col]), None)
         copies = 2 if r["zygosity"] == "hom" else 1
         popmax = r.get("gnomad_popmax_af")
         if predicted:
@@ -357,7 +372,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
             modes, basis = kb.modes_for(gene, [])
             e_level, e_reasons = ev.predicted_evidence(
                 consequence=r["consequence"], am_score=r.get("am_score"), revel=r.get("revel"), loeuf=r.get("loeuf"),
-                popmax_af=popmax, kg_af=r["af_1kg"], recessive_gene="AR" in modes)
+                popmax_af=popmax, kg_af=r["af_1kg"], recessive_gene="AR" in modes,
+                clinvar=_clinvar_label(r))
             if e_level is None:
                 continue
             cls = "predicted"
@@ -377,6 +393,10 @@ def _claims(ctx: Context, con, k: dict) -> int:
         condition_roles = [{"name": c.name, "role": ev.role(set(c.modes), r["zygosity"], r["chrom"])[0]}
                            for c in conds if c.modes]
         disease_like = cls in ("pathogenic", "likely_pathogenic", "conflicting", "predicted")
+        common = ev.too_common(popmax_af=popmax, kg_af=r["af_1kg"], stars=r.get("clinvar_stars"))
+        if disease_like and common:
+            # A rare-disease role (carrier/affected) presumes a rare disease allele; BA1 says this one isn't.
+            role, role_reason, condition_roles = "common", common, []
         if cls == "drug_response":
             section, group = "pgx", "drug_response"
         elif cls == "association" or (conds and all(BLOOD_GROUP.search(c.name) for c in conds)):
@@ -387,7 +407,7 @@ def _claims(ctx: Context, con, k: dict) -> int:
             section, group = "carrier", "carrier"
         elif cls in ("risk_factor", "protective") or r["clinvar_low_penetrance"]:
             section, group = "health", "risk"
-        elif cls == "conflicting":
+        elif cls == "conflicting" or role == "common":
             section, group = "health", "uncertain"
         elif cls == "predicted":
             section, group = "health", "predicted"
@@ -412,7 +432,7 @@ def _claims(ctx: Context, con, k: dict) -> int:
                 f"{_names(by_role['possible'])} (dominant) one copy can matter, though many people never develop "
                 "it.")
         if major:
-            statement += _major_note(major, copies)
+            statement += _major_note(major, copies, r.get("clinvar_consequences"))
         if disease_like and basis != "unknown":
             e_reasons = e_reasons + [f"Inheritance: {inh.describe(modes)} (from the "
                                      f"{'named condition' if basis == 'condition' else 'gene'}). {role_reason}"]
@@ -420,20 +440,21 @@ def _claims(ctx: Context, con, k: dict) -> int:
             e_reasons = e_reasons + [f"Also named on the ClinVar record, but by fewer labs or only in gene-wide "
                                      f"submissions: {_names([c.name for c in also_listed], 4)}"]
         sources = []
-        if not predicted:
+        if r.get("clinvar_id") is not None:
             sources.append({"source": "clinvar", "version": versions.get("clinvar"), "record": str(r["clinvar_id"]),
                             "url": f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{r['clinvar_id']}/"})
         if r.get("am_score") is not None:
             sources.append({"source": "alphamissense", "version": versions.get("alphamissense"),
-                            "record": f"{r['am_score']:.3f}", "url": ""})
+                            "record": f"score {r['am_score']:.3f}", "url": AM_URL})
         if r.get("revel") is not None:
-            sources.append({"source": "revel", "version": versions.get("revel"), "record": f"{r['revel']:.3f}",
-                            "url": ""})
-        if popmax is not None:
-            sources.append({"source": "gnomad", "version": versions.get("gnomad"), "record": "popmax_af", "url": ""})
+            sources.append({"source": "revel", "version": versions.get("revel"), "record": f"score {r['revel']:.3f}",
+                            "url": REVEL_URL})
+        if popmax is not None or predicted:
+            sources.append({"source": "gnomad", "version": versions.get("gnomad"),
+                            "record": f"{r['chrom']}-{r['pos']}-{r['ref']}-{r['alt']}", "url": gnomad_url(r)})
         if r["af_1kg"] is not None:
-            sources.append({"source": "1000genomes", "version": versions.get("1000genomes"), "record": "AF",
-                            "url": ""})
+            sources.append({"source": "1000genomes", "version": versions.get("1000genomes"),
+                            "record": r["rsid"] or f"{r['chrom']}:{r['pos']}", "url": ensembl_url(r)})
         if gene in kb.validity:
             sources.append({"source": "clingen", "version": versions.get("clingen"), "record": gene,
                             "url": f"https://search.clinicalgenome.org/kb/genes?search={gene}"})
@@ -441,7 +462,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
             sources.extend({"source": sid, "version": versions[sid], "record": "inheritance", "url": ""}
                            for sid in ("hpo", "orphanet", "mondo") if versions.get(sid))
         if acmg:
-            sources.append({"source": "acmg_sf", "version": versions.get("acmg_sf"), "record": gene, "url": ""})
+            sources.append({"source": "acmg_sf", "version": versions.get("acmg_sf"), "record": gene,
+                            "url": ACMG_SF_URL})
         kind = "predicted_variant" if predicted else "clinvar_variant"
         tag = "predicted" if predicted else "clinvar"
         claims.append({
@@ -452,6 +474,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
             "chrom": r["chrom"], "pos": int(r["pos"]), "ref": r["ref"], "alt": r["alt"],
             "genotype": _genotype(r), "copies": copies, "zygosity": r["zygosity"],
             "consequence": r["consequence"], "impact": r["impact"], "aa_change": r["aa_change"],
+            "transcript": r.get("transcript"), "transcript_basis": r.get("transcript_basis"),
+            "refseq": r.get("refseq"),
             "conditions": cond_text, "conditions_detail": json.dumps([c.as_dict() for c in conds]),
             "conditions_also_listed": "; ".join(c.name for c in also_listed) or None,
             "statement": statement,
@@ -620,16 +644,41 @@ def _alt_is_major(r: dict) -> tuple[float, str] | None:
     return None
 
 
-def _major_note(major: tuple[float, str], copies: int) -> str:
+def _major_note(major: tuple[float, str], copies: int, clinvar_consequences=None) -> str:
+    """Only facts with a source: the population frequency, and what ClinVar itself says about the allele."""
     af, label = major
-    s = (f" Note: this is the majority allele, on about {af:.0%} of chromosomes ({label}); the reference genome "
-         "happens to carry the rarer one.")
+    s = (f" Note: the allele ClinVar describes here is the majority allele, on about {af:.0%} of chromosomes "
+         f"({label}); the reference genome happens to carry the less common one.")
     if copies == 2:
-        s += (" Two copies means your genotype here is the typical one; the effect usually discussed for this "
-              "site belongs to the rarer allele, which you do not carry.")
-    else:
-        s += " With one copy you also carry the rarer reference allele on your other chromosome."
+        s += " Two copies means your genotype here is the most common one."
+    if clinvar_consequences is not None and "no_sequence_alteration" in list(clinvar_consequences):
+        s += (" ClinVar marks this entry as \"no sequence alteration\": the allele it describes is the gene's "
+              "standard sequence.")
     return s
+
+
+def _clinvar_label(r: dict) -> str | None:
+    sig = r.get("clinvar_significance")
+    if not sig:
+        return None
+    stars = int(r.get("clinvar_stars") or 0)
+    return f"{sig.replace('_', ' ').split('|')[0].lower()} ({stars}★)"
+
+
+AM_URL = "https://doi.org/10.1126/science.adg7492"
+REVEL_URL = "https://doi.org/10.1016/j.ajhg.2016.08.016"
+ACMG_SF_URL = "https://doi.org/10.1016/j.gim.2025.101454"
+
+
+def gnomad_url(r: dict) -> str:
+    return (f"https://gnomad.broadinstitute.org/variant/{r['chrom']}-{r['pos']}-{r['ref']}-{r['alt']}"
+            "?dataset=gnomad_r2_1")
+
+
+def ensembl_url(r: dict) -> str:
+    if r.get("rsid") and str(r["rsid"]).startswith("rs"):
+        return f"https://grch37.ensembl.org/Homo_sapiens/Variation/Population?v={r['rsid']}"
+    return f"https://grch37.ensembl.org/Homo_sapiens/Location/View?r={r['chrom']}:{r['pos']}-{r['pos']}"
 
 
 def _statement(cls: str, conditions: str, copies: int, role: str | None, r: dict, gene: str | None) -> str:
@@ -649,7 +698,9 @@ def _statement(cls: str, conditions: str, copies: int, role: str | None, r: dict
     if cls == "predicted":
         what = ("predicted to stop the gene working" if ev.is_lof(r["consequence"]) else
                 "predicted to damage the protein")
-        return (f"This rare variant in {gene} is {what} by computer models; no lab has classified it. {gene} is "
+        lab = (f"ClinVar lists it as {_clinvar_label(r)}" if r.get("clinvar_significance")
+               else "no lab has classified it")
+        return (f"This rare variant in {gene} is {what} by computer models; {lab}. {gene} is "
                 f"linked to {conditions}. You carry {copy_txt}.{tail}")
     if cls == "conflicting":
         return (f"Labs disagree about this variant ({_conflicts(r.get('clinvar_conflicts'))}) "

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 
-MODEL_VERSION = "3"
+MODEL_VERSION = "4"
 
 EVIDENCE = ["Limited", "Moderate", "Strong"]
 CALL = ["Not callable", "Low", "Medium", "High"]
@@ -55,6 +55,21 @@ BA1_AF = 0.05
 BS1_AF = 0.01
 
 DISEASE_CLASSES = {"pathogenic", "likely_pathogenic"}
+
+
+def too_common(*, popmax_af: float | None, kg_af: float | None, stars: int | None) -> str | None:
+    """ACMG/AMP BA1: an allele at ≥5% in a population is too common to cause a rare Mendelian disease on its own.
+
+    Returns the reason when BA1 applies, so carrier/affected labels are withheld. Expert-panel (3★+) ClinVar
+    classifications already weighed frequency (ClinGen's BA1 exceptions such as HFE C282Y), so they are kept."""
+    if int(stars or 0) >= 3:
+        return None
+    af = max([a for a in (popmax_af, kg_af) if a is not None], default=None)
+    if af is None or af < BA1_AF:
+        return None
+    share = "over 99%" if af >= 0.995 else f"{af:.0%}"
+    return (f"Carried on up to {share} of chromosomes in some populations: too common to cause a rare inherited "
+            "condition on its own (ACMG/AMP rule BA1), so carrier/affected labels are not applied")
 
 
 def _down(level: str, steps: int = 1) -> str:
@@ -190,7 +205,7 @@ def acmg_reportable(rule: str | None, *, copies: int, zygosity: str | None, cons
         return False
     r = rule.lower()
     if "c282y" in r:
-        return zygosity == "hom" and bool(re.search(r"C282Y|282C>282Y", aa_change or ""))
+        return zygosity == "hom" and bool(re.search(r"C282Y|282C>282Y|Cys282Tyr", aa_change or ""))
     if "biallelic" in r:
         return copies == 2 or compound
     if "truncating" in r:
@@ -200,7 +215,7 @@ def acmg_reportable(rule: str | None, *, copies: int, zygosity: str | None, cons
 
 def predicted_evidence(*, consequence: str | None, am_score: float | None, revel: float | None,
                        loeuf: float | None, popmax_af: float | None, kg_af: float | None,
-                       recessive_gene: bool) -> tuple[str | None, list[str]]:
+                       recessive_gene: bool, clinvar: str | None = None) -> tuple[str | None, list[str]]:
     """Grade a computational prediction for a rare, unclassified variant. Returns (None, []) if not flagged.
 
     Only flags variants where predictors agree or are calibrated to strong evidence, so the list stays short
@@ -238,8 +253,12 @@ def predicted_evidence(*, consequence: str | None, am_score: float | None, revel
         return None, []
     reasons.append("Rare: " + (f"at most {max(afs):.3%} in any population" if afs else "not seen in gnomAD or 1000 "
                                                                                         "Genomes"))
-    reasons.append("Computer prediction only: no lab or expert has classified this variant, so it is capped at "
-                   "Limited evidence")
+    if clinvar:
+        reasons.append(f"ClinVar: {clinvar}, i.e. labs have not settled whether it causes disease; the "
+                       "computer prediction is capped at Limited evidence")
+    else:
+        reasons.append("Computer prediction only: no lab or expert has classified this variant, so it is capped "
+                       "at Limited evidence")
     return PREDICTED_CAP, reasons
 
 

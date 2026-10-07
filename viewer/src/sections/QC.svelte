@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Manifest } from '../lib/data';
-  import { loadDoc } from '../lib/data';
+  import { loadDoc, loadAudit } from '../lib/data';
   import { query, useRelease } from '../lib/db';
   import { int, pct, compact } from '../lib/format';
   import Card from '../components/Card.svelte';
@@ -30,6 +30,9 @@
     concordance_pct: { name: 'Agreement with tellmeGen file', term: 'Concordance', fmt: (v) => `${v.toFixed(2)}%`, why: 'The variant file and the provider’s genotype file were made separately; they should agree almost perfectly.' },
   };
 
+  const SRC: Record<string, string> = { clinvar: 'ClinVar records (classification and review stars)', gwas: 'GWAS Catalog associations (study, effect allele)',
+    pgs: 'PGS Catalog scores (trait, publication)', pubmed: 'PubMed citations (title)', links: 'Source links (sampled)', curated: 'Cited baseline risks (quote still on the page)' };
+  const audit = $derived(loadAudit(m));
   const load = $derived(Promise.all([
     loadDoc(m, 'qc'), loadDoc(m, 'coverage'), loadDoc(m, 'alignment_stats'), loadDoc(m, 'fastq_stats'),
     loadDoc(m, 'reference_full'), loadDoc(m, 'inventory'), loadDoc(m, 'sections'), loadDoc(m, 'checks'),
@@ -279,6 +282,29 @@
           {#if !ok}<p class="small warn">Some checks failed: results they mention may be shown wrongly. Re-run the pipeline after updating, or report it.</p>{/if}
         </Card>
       {/if}
+
+      {#await audit then au}
+        <Card title="Source re-verification" subtitle={au ? `This release re-checked against live ClinVar, GWAS Catalog, PGS Catalog and PubMed on ${String(au.audited_at).slice(0, 10)}.` : 'Every finding names its exact source record; wgs audit re-fetches those records and confirms they still say what this release says.'}>
+          {#if au}
+            <ul class="selfc small">
+              {#each Object.entries(au.counts as Record<string, Record<string, number>>) as [k, c]}
+                {@const bad = (c.mismatch ?? 0) + (c.missing ?? 0) + (c.broken ?? 0) + (c.error ?? 0)}
+                {@const tot = Object.values(c).reduce((a: number, b: number) => a + b, 0)}
+                <li class={bad ? 'fail' : 'pass'}><span class="pill {bad ? 'warn' : 'pass'}" style="white-space: nowrap">{bad ? '!' : '✓'} {tot - bad}/{tot}</span>
+                  <span><strong>{SRC[k] ?? k}</strong> <span class="muted">— {Object.entries(c).map(([s, n]) => `${n} ${s}`).join(', ')}</span></span></li>
+              {/each}
+            </ul>
+            {#if au.problems?.length}
+              <details class="small"><summary>{au.problems.length} item{au.problems.length > 1 ? 's' : ''} differ from the live source</summary>
+                <ul>{#each au.problems.slice(0, 50) as p}<li><span class="mono">{p.record}</span> — {p.status}{p.live ? `: live says ${p.live}` : ''}{p.stored ? `; this release says ${p.stored}` : ''}{p.detail ? ` (${p.detail})` : ''}{#if p.url} · <a href={p.url} target="_blank" rel="noreferrer">source</a>{/if}</li>{/each}</ul>
+                <p class="faint">“Changed upstream” means the source was updated after this release’s snapshot; refresh knowledge and re-run to pick it up.</p>
+              </details>
+            {/if}
+          {:else}
+            <p class="small muted">Not audited yet. Run <code>pixi run wgs audit</code> (needs internet).</p>
+          {/if}
+        </Card>
+      {/await}
 
       {#if inv}
         <Card title="Input files found" subtitle="The pipeline finds files by content, not by name or folder; sections adapt to whatever is present.">

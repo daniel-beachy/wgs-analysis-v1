@@ -41,6 +41,7 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 | `wgs verify-inputs` | Checks inputs against `MANIFEST.sha256` (reads everything, so it is slow) |
 | `wgs run` | Runs or resumes every pipeline stage and publishes a new dashboard release |
 | `wgs knowledge status` / `refresh` | Shows or updates the public knowledge versions (ClinVar, gnomAD, ClinGen, …) |
+| `wgs audit [--only curated]` | Re-checks the newest release against live ClinVar, GWAS Catalog, PGS Catalog, PubMed, source links and every cited baseline quote (needs internet; summary shown on the Data quality tab) |
 | `wgs query "<SQL>"` | Read-only SQL against the newest release (`claims`, `annotations`, `variants`, …); `-` reads SQL from stdin |
 
 More commands are added as each development step lands (see `docs/PLAN.md`).
@@ -73,6 +74,7 @@ pixi run wgs knowledge status                 # which versions you have and when
 pixi run wgs knowledge refresh                # download only sources that changed upstream (about 4 GB the first time)
 pixi run wgs knowledge refresh --source clinvar --pin clinvar=20251006   # reproduce an archived ClinVar
 pixi run wgs run                              # re-annotate and publish; a new release only if something changed
+pixi run wgs audit                            # confirm every cited record and quote still says what we show
 ```
 
 The dashboard's **What changed** tab then shows which sources moved to a new version, which findings were added, removed or regraded, and every variant whose ClinVar classification changed. A sensible routine is to refresh monthly. Every finding carries an evidence grade and a call-confidence grade, each with reasons ([ADR-013](docs/DECISIONS.md), and the "How this project grades its confidence" section of the [primer](docs/GENETICS_PRIMER.md)).
@@ -101,6 +103,8 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
+
+**Risk in absolute numbers.** Where it can be traced to sources, a polygenic score also shows "≈ X in 100 people with your score vs Y in 100 typical". The typical risk and any per-SD effect come from `src/wgs/knowledge/data/baseline_risk.toml`, a hand-curated table where every row carries its source URL, PubMed id and the exact quoted sentence; `wgs audit` confirms each quote is still on its page. Otherwise the card says "not established" and why ([ADR-018](docs/DECISIONS.md)).
 
 AlphaMissense and REVEL are licensed for non-commercial use, which this personal project is. The downloaded files stay in `wgs-data/knowledge/` and are never committed to the repo.
 

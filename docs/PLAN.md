@@ -11,6 +11,7 @@ Each step ends with a **checkpoint** where Daniel tries the result before we mov
 | 4 | Health risk and carrier status | Section review |
 | 5 | Pharmacogenomics: PharmCAT 3.4 with per-position GRCh37→38 genotyping, CYP2D6 via Cyrius, HLA via T1K, MT-RNR1; Medicines tab with enzyme-speed chart, gene cards and per-drug guidelines; then a clean-up: sourced gene text (MedlinePlus/NCBI), drug buckets from curated flags, release self-checks (ADR-016) | Compare with tellmeGen ✅ built |
 | 6 | Traits (GWAS Catalog single variants) and polygenic score percentiles (PGS Catalog + 1000 Genomes, pgsc_calc steps), plus a "Brain & mind" section (caveats, SFARI gene check, brain-related percentiles); disease scores on Health; evidence model v3 (ADR-017) | Section review ✅ built |
+| 6b | Verification audit: exact source per finding, `wgs audit` live re-checks, ACMG BA1, absolute risk ("X in 100 vs Y typical") from AUROC or cited per-SD effects and a quoted baseline table, ClinGen penetrance bands (ADR-018) | Audit clean ✅ built |
 | 7 | Ancestry and haplogroups | Section review |
 | 8 | "You vs the average human" body-map infographic | Visual review |
 | 9 | GIAB HG002 benchmark and demo mode | Accuracy numbers |

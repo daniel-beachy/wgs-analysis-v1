@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import json
 import os
+import re
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -33,6 +35,7 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .. import absrisk
 from .. import evidence as ev
 from ..knowledge import Store
 from ..pipeline import Context, Stage, run, write_json
@@ -495,8 +498,18 @@ def best_evaluation(evals: list[dict]) -> dict | None:
 def effect_text(e: dict | None) -> str | None:
     if not e:
         return None
-    parts = [f"{lab} {e[k]}" for k, lab in (("or", "OR"), ("hr", "HR"), ("beta", "β"), ("auroc", "AUROC"),
-                                            ("cindex", "C-index")) if e.get(k)]
+    notes = f"{e.get('info') or ''} {e.get('other') or ''}"
+    # PPMs whose per-SD meaning is confirmed by a quoted paper in the curated table
+    per_sd_ppms = {r.get("ppm_id") for r in absrisk.table().get("per_sd", [])}
+    per_sd = e.get("ppm_id") in per_sd_ppms
+    unit = ("per standard deviation of the score"
+            if per_sd or re.search(r"per (1[- ]?)?(SD|standard deviation)", notes, re.I)
+            else "between score groups (see the paper)" if re.search(r"decile|quintile|quartile|tertile|top \d+ ?%|"
+                                                                      r"percentile", notes, re.I)
+            else "comparison not stated in the PGS Catalog; see the paper")
+    parts = [f"{lab} {e[k]}" + (f" ({unit})" if k in ("or", "hr", "beta") else "")
+             for k, lab in (("or", "OR"), ("hr", "HR"), ("beta", "β"), ("auroc", "AUROC"), ("cindex", "C-index"))
+             if e.get(k)]
     return "; ".join(parts) or e.get("other")
 
 
@@ -528,7 +541,19 @@ def promote(sel: list[dict], scored: dict[str, dict]) -> list[dict]:
     return out
 
 
-def grade(sel: list[dict], scored: dict[str, dict], root: Path) -> list[dict]:
+def abs_risk(r: dict, you: dict, evals: list[dict], sex: str | None) -> dict | None:
+    """Your absolute risk next to the typical person's, for disease scores (ADR-018). None for measurements."""
+    if r.get("section") != "health" or "measurement" in (r.get("trait_label") or "").lower():
+        return None
+    want = {"F": "XX", "M": "XY"}.get(r.get("sex") or "")
+    if want and sex and not sex.upper().startswith(want):
+        return {"status": "not_applicable", "reason": "this disease score is for the other sex"}
+    return absrisk.estimate(pgs_id=r["pgs_id"], trait_id=r.get("trait_id"),
+                            labels=[r.get("trait_label"), r.get("label"), r.get("trait_reported")],
+                            z=you.get("z"), compared_with=you.get("compared_with"), evals=evals, sex=sex)
+
+
+def grade(sel: list[dict], scored: dict[str, dict], root: Path, sex: str | None = None) -> list[dict]:
     """One row per selected score: your result, catalog metadata, best evaluation and the Model 3 grades."""
     con = duckdb.connect()
     meta = {r["pgs_id"]: r for r in _clean(con.execute(f"""SELECT s.pgs_id, s.name, s.trait_reported, s.method,
@@ -536,7 +561,10 @@ def grade(sel: list[dict], scored: dict[str, dict], root: Path) -> list[dict]:
         p.first_author, p.title, p.journal, p.published FROM '{root / "scores.parquet"}' s
         LEFT JOIN '{root / "publications.parquet"}' p USING (pgp_id)""").fetchdf().to_dict("records"))}
     about = {r["trait_id"]: r for r in _clean(con.execute(f"""SELECT trait_id, description AS trait_description,
-        url AS trait_url FROM '{root / "traits.parquet"}'""").fetchdf().to_dict("records"))}
+        CASE WHEN regexp_matches(trait_id, '^[A-Za-z]+_[A-Za-z0-9]+$')
+             THEN 'https://www.ebi.ac.uk/ols4/ontologies/' || lower(split_part(trait_id, '_', 1))
+                  || '/classes?obo_id=' || replace(trait_id, '_', ':')
+             ELSE url END AS trait_url FROM '{root / "traits.parquet"}'""").fetchdf().to_dict("records"))}
     evals: dict[str, list[dict]] = {}
     for e in _clean(con.execute(f"""SELECT e.*, p.first_author AS eval_author, p.published AS eval_published,
             p.pmid AS eval_pmid FROM '{root / "evaluations.parquet"}' e
@@ -570,8 +598,15 @@ def grade(sel: list[dict], scored: dict[str, dict], root: Path) -> list[dict]:
             "eval_pmid": b and b.get("eval_pmid"),
             "evidence_level": e_level, "evidence_reasons": e_reasons, "call_confidence": c_level,
             "call_reasons": c_reasons, "overall": ev.overall(e_level, c_level),
+            "abs_risk": json.dumps(a) if (a := abs_risk({**r, "trait_reported": m.get("trait_reported")}, you,
+                                                        evals.get(pid, []), sex)) else None,
         })
     return out
+
+
+def _sex(ctx: Context) -> str | None:
+    p = qc.out_path(ctx)
+    return (json.loads(p.read_text()).get("inferred_sex") or {}).get("call") if p.exists() else None
 
 
 def _collect(ctx: Context, d: Path, sel: list[dict], stats: dict, version: str, catalog_root: Path) -> dict:
@@ -602,7 +637,7 @@ def _collect(ctx: Context, d: Path, sel: list[dict], stats: dict, version: str, 
         FROM sel LEFT JOIN s ON split_part(s.PGS, '_', 1) = sel.pgs_id
         LEFT JOIN m ON m.pgs_id = sel.pgs_id""").fetchdf()
     scored = {r["pgs_id"]: r for r in _clean(rows.to_dict("records"))}
-    pq.write_table(pa.Table.from_pylist(grade(promote(sel, scored), scored, catalog_root)), out_scores(ctx))
+    pq.write_table(pa.Table.from_pylist(grade(promote(sel, scored), scored, catalog_root, _sex(ctx))), out_scores(ctx))
     con.execute(f"""COPY (SELECT * FROM read_csv('{pop}', delim='\t', header=true))
         TO '{out_ancestry(ctx)}' (FORMAT parquet)""")
     me = con.execute(f"""SELECT * FROM read_csv('{pop}', delim='\t', header=true)
@@ -619,16 +654,35 @@ def _collect(ctx: Context, d: Path, sel: list[dict], stats: dict, version: str, 
     return res
 
 
+# Bump when anything that changes the scores themselves (genotyping, matching, scoring, adjustment) changes.
+# Grading and absolute-risk changes don't need it: they re-use the scores in seconds instead of hours.
+SCORING_VERSION = "1"
+
+
+def _scoring_key(ctx: Context, panel: dict, version: str, ids: list[str]) -> str:
+    files = [variants.variants_parquet(ctx), coverage.out_dir(ctx) / "callable.parquet"]
+    parts = [SCORING_VERSION, version, str(panel.get("version")), str(MIN_OVERLAP), str(MIN_GQ), ",".join(ids),
+             *(f"{f}:{f.stat().st_size}:{int(f.stat().st_mtime)}" for f in files)]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
 def _pgs(ctx: Context) -> dict:
     panel = _panel(ctx)
     scoring, sel, version = _catalog(ctx)
     ids = sorted({r["pgs_id"] for r in sel})
-    ref = _reference_qc(ctx, panel)
-    stats = _target(ctx, panel, ref, scoring, ids)
-    stats.update(_pca(ctx, panel, ref))
-    _match(ctx, scoring, ids, version)
-    sscores = _score(ctx, ref, panel)
-    d = _adjust(ctx, panel, sscores)
+    key = _scoring_key(ctx, panel, version, ids)
+    d, done = pgs_dir(ctx) / "adjust", pgs_dir(ctx) / "adjust" / "scored.json"
+    prev = json.loads(done.read_text()) if done.exists() else {}
+    if prev.get("key") == key and out_genotype_qc(ctx).exists():
+        stats = prev["stats"]
+    else:
+        ref = _reference_qc(ctx, panel)
+        stats = _target(ctx, panel, ref, scoring, ids)
+        stats.update(_pca(ctx, panel, ref))
+        _match(ctx, scoring, ids, version)
+        sscores = _score(ctx, ref, panel)
+        d = _adjust(ctx, panel, sscores)
+        done.write_text(json.dumps({"key": key, "stats": stats}))
     res = _collect(ctx, d, sel, stats, version, scoring.parent)
     return {k: res[k] for k in ("scored", "selected", "most_similar_population")}
 
@@ -657,11 +711,13 @@ def _params(ctx: Context) -> dict:
     st = Store(ctx.cfg)
     return {"catalog": (st.current("pgs_catalog") or {}).get("version"),
             "reference": (st.current("pgs_reference") or {}).get("version"), "min_overlap": MIN_OVERLAP,
-            "min_gq": MIN_GQ, "evidence_model": ev.MODEL_VERSION}
+            "min_gq": MIN_GQ, "evidence_model": ev.MODEL_VERSION,
+            "baseline_risk": hashlib.sha256(absrisk.TABLE.read_bytes()).hexdigest()[:12]
+            if absrisk.TABLE.exists() else None}
 
 
 STAGE = Stage(
-    name="pgs", version="2", title="Polygenic scores (PGS Catalog + 1000 Genomes)", fn=_pgs, inputs=_inputs,
+    name="pgs", version="3", title="Polygenic scores (PGS Catalog + 1000 Genomes)", fn=_pgs, inputs=_inputs,
     outputs=lambda ctx: [out_scores(ctx), out_summary(ctx), out_ancestry(ctx), out_genotype_qc(ctx)],
     available=_available,
     params=_params,

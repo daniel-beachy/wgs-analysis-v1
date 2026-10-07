@@ -6,7 +6,7 @@
   import { query, useRelease, type Row } from '../lib/db';
   import { go } from '../lib/router.svelte';
   import { sectionFor } from '../lib/learn';
-  import { OVERALL_PILL, consequenceLabel, aaShort, pct } from '../lib/evidence';
+  import { OVERALL_PILL, consequenceLabel, aaShort, pct, parseSources } from '../lib/evidence';
   import Card from '../components/Card.svelte';
   import Explain from '../components/Explain.svelte';
   import Term from '../components/Term.svelte';
@@ -78,7 +78,8 @@
                   {#if b.revel != null}<li><Term t="REVEL" />: {b.revel.toFixed(2)}</li>{/if}
                   {#if b.am_score != null}<li><Term t="AlphaMissense" />: {b.am_score.toFixed(2)}</li>{/if}
                   {#if b.loeuf != null}<li><Term t="LOEUF" />: {b.loeuf.toFixed(2)}</li>{/if}
-                  <li>SFARI: {b.category} · {b.reports} report{b.reports === 1 ? '' : 's'} · <a href={`https://gene.sfari.org/database/human-gene/${b.gene}`} target="_blank" rel="noreferrer">gene page</a></li>
+                  <li>SFARI: {b.category} · {b.reports} report{b.reports === 1 ? '' : 's'}</li>
+                  <li>Sources: {#each parseSources(b) as s, i}{i ? ' · ' : ''}{#if s.url}<a href={s.url} target="_blank" rel="noreferrer">{s.source} {s.version ?? ''}</a>{:else}{s.source} {s.version ?? ''}{/if}{/each}</li>
                 </ul></td></tr>
               {/if}
             {/each}

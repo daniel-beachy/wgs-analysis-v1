@@ -42,6 +42,54 @@ CHECKS: list[Check] = [
              WHERE category IN ('pathogenic', 'likely_pathogenic', 'conflicting', 'predicted')
                AND greatest(coalesce(af_1kg, 0), coalesce(gnomad_popmax_af, 0)) >= 0.05
                AND evidence_level <> 'Limited'"""),
+    Check("claims.exact_record", "Every finding links to its exact source record, not just a website",
+          "A link to a database's home page can't be checked; each claim must point at the record it came from.",
+          ("claims",),
+          """SELECT claim_id FROM claims WHERE NOT list_bool_or(list_transform(
+               coalesce(json_extract_string(sources, '$[*].url'), []),
+               u -> coalesce(regexp_matches(u, '://[^/]+/[^?#]*[^/?#]/[^/?#]+|[?][^#]*='), false)))"""),
+    Check("claims.ba1_role", "Common variants never get a carrier or affected label",
+          "An allele carried by 5% or more of a population can't cause a rare disease on its own (ACMG/AMP BA1); "
+          "only expert-panel (3★+) ClinVar records, which already weighed frequency, are exempt.", ("claims",),
+          """SELECT coalesce(gene, rsid, claim_id) FROM claims
+             WHERE role IN ('carrier', 'affected', 'possible') AND coalesce(clinvar_stars, 0) < 3
+               AND greatest(coalesce(af_1kg, 0), coalesce(gnomad_popmax_af, 0)) >= 0.05"""),
+    Check("claims.no_rarer_allele_text", "No finding blames 'the rarer allele' when yours is the common one",
+          "This wording was wrong for variants where the reference genome carries the rare version.", ("claims",),
+          """SELECT claim_id FROM claims WHERE statement ILIKE '%rarer allele%' OR role_reason ILIKE '%rarer allele%'
+             OR CAST(evidence_reasons AS VARCHAR) ILIKE '%rarer allele%'"""),
+    Check("claims.protein_hgvs", "Protein changes use standard HGVS names (p.Arg402Gln)",
+          "Readers and search engines recognise the standard form; anything else is a formatting bug.", ("claims",),
+          """SELECT coalesce(gene, claim_id) || ' ' || aa_change FROM claims WHERE aa_change IS NOT NULL
+             AND (NOT regexp_matches(aa_change, '^p[.]') OR length(aa_change) > 40)"""),
+    Check("claims.brain_agree", "Findings and the Brain & mind list agree on your genotype",
+          "The same variant must not read as one copy on one page and two on another.",
+          ("claims", "brain_variants"),
+          """SELECT b.gene || ' ' || b.chrom || ':' || b.pos FROM brain_variants b JOIN claims c
+               ON c.chrom = b.chrom AND c.pos = b.pos AND c.alt = b.alt
+             WHERE c.zygosity IS NOT NULL AND b.zygosity IS NOT NULL AND c.zygosity <> b.zygosity"""),
+    Check("brain.sourced", "Every Brain & mind variant names its sources", "Each row needs links to the records "
+          "behind it (SFARI Gene, gnomAD, ClinVar when classified).", ("brain_variants",),
+          """SELECT gene || ' ' || chrom || ':' || pos FROM brain_variants
+             WHERE sources IS NULL OR sources IN ('', '[]')"""),
+    Check("traits.sourced", "Every trait variant names its GWAS study and paper",
+          "A trait association must point at the study (GCST) and publication it came from.", ("trait_snps",),
+          "SELECT rsid FROM trait_snps WHERE study IS NULL OR pmid IS NULL"),
+    Check("claims.penetrance_single_gene", "Every 'how often it leads to disease' figure was rated for that gene alone",
+          "ClinGen sometimes rates several genes together; that likelihood is not a figure for any one of them.",
+          ("claims",),
+          """SELECT gene FROM claims WHERE json_type(json_extract(actionability, '$.penetrance')) = 'OBJECT'
+             AND coalesce(json_array_length(json_extract(actionability, '$.penetrance.genes')), 0) <> 1"""),
+    Check("pgs.abs_risk_sourced", "Every 'your risk in numbers' result cites both of its numbers",
+          "An absolute risk is a typical risk times the score's effect; both must link to their source.",
+          ("pgs_scores",),
+          """SELECT pgs_id FROM pgs_scores WHERE json_extract_string(abs_risk, '$.status') = 'ok'
+             AND (json_extract_string(abs_risk, '$.baseline.url') IS NULL
+                  OR json_extract_string(abs_risk, '$.effect.url') IS NULL
+                  OR json_extract_string(abs_risk, '$.effect.ppm_id') IS NULL
+                  OR (json_extract_string(abs_risk, '$.baseline.kind') <> 'cohort'
+                      AND json_extract_string(abs_risk, '$.baseline.quote') IS NULL)
+                  OR CAST(json_extract(abs_risk, '$.you') AS DOUBLE) NOT BETWEEN 0 AND 1)"""),
     Check("pgx.matched_has_text", "Every guideline that matches you has recommendation text",
           "A matched guideline with no text shows as an empty card.", ("pgx_drugs",),
           """SELECT drug || ' (' || source || ')' FROM pgx_drugs

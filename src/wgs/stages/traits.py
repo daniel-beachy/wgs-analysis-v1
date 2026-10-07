@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import duckdb
@@ -177,21 +178,37 @@ def _brain(ctx: Context) -> list[dict]:
     con = duckdb.connect()
     rows = con.execute(f"""SELECT a.chrom, a.pos, a.rsid, a.ref, a.alt, a.gene, a.zygosity, a.gt, a.gq,
             a.consequence, a.impact, a.aa_change, a.am_score, a.revel, a.loeuf, a.gnomad_popmax_af, a.af_1kg,
-            a.clinvar_significance, a.clinvar_stars, s.score AS sfari_score, s.syndromic, s.category, s.reports
+            a.clinvar_id, a.clinvar_significance, a.clinvar_stars,
+            s.score AS sfari_score, s.syndromic, s.category, s.reports
         FROM '{ann}' a JOIN '{genes}' s ON s.gene = a.gene
         WHERE a.filter = 'PASS' AND coalesce(a.gq, 0) >= 20 AND a.impact IN ('HIGH', 'MODERATE')
         ORDER BY a.chrom_order, a.pos""").fetchdf().to_dict("records")
     out = []
+    versions = st.versions()
     for r in rows:
         r = {k: (None if isinstance(v, float) and v != v else v) for k, v in r.items()}
         level, reasons = ev.predicted_evidence(
             consequence=r["consequence"], am_score=r["am_score"], revel=r["revel"], loeuf=r["loeuf"],
-            popmax_af=r["gnomad_popmax_af"], kg_af=r["af_1kg"], recessive_gene=False)
+            popmax_af=r["gnomad_popmax_af"], kg_af=r["af_1kg"], recessive_gene=False,
+            clinvar=annotate._clinvar_label(r))
         afs = [a for a in (r["gnomad_popmax_af"], r["af_1kg"]) if a is not None]
         rare = not afs or max(afs) < ev.PREDICTED_MAX_AF
         if not rare:
             continue
-        out.append({**r, "flagged": level is not None, "evidence_level": level, "evidence_reasons": reasons})
+        sources = [{"source": "sfari", "version": versions.get("sfari"), "record": r["gene"],
+                    "url": f"https://gene.sfari.org/database/human-gene/{r['gene']}"},
+                   {"source": "gnomad", "version": versions.get("gnomad"),
+                    "record": f"{r['chrom']}-{r['pos']}-{r['ref']}-{r['alt']}", "url": annotate.gnomad_url(r)}]
+        if r["clinvar_id"] is not None:
+            sources.insert(0, {"source": "clinvar", "version": versions.get("clinvar"), "record": str(r["clinvar_id"]),
+                               "url": f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{r['clinvar_id']}/"})
+        for key, url in (("am_score", annotate.AM_URL), ("revel", annotate.REVEL_URL)):
+            if r[key] is not None:
+                sources.append({"source": "alphamissense" if key == "am_score" else "revel",
+                                "version": versions.get("alphamissense" if key == "am_score" else "revel"),
+                                "record": f"score {r[key]:.3f}", "url": url})
+        out.append({**r, "flagged": level is not None, "evidence_level": level, "evidence_reasons": reasons,
+                    "sources": json.dumps(sources)})
     pq.write_table(pa.Table.from_pylist(out) if out else pa.table({"gene": pa.array([], pa.string())}),
                    out_brain(ctx))
     return out

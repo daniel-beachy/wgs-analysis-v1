@@ -47,6 +47,7 @@ export const consequenceLabel = (c: string | null | undefined) =>
 /** bcftools csq "222A>222V" → "A222V". */
 export function aaShort(aa: string | null | undefined): string {
   if (!aa) return '';
+  if (aa.startsWith('p.')) return aa;
   const m = /^(\d+)([A-Z*]+)>(\d+)([A-Z*]+)$/.exec(aa);
   return m ? `${m[2]}${m[1]}${m[4]}` : aa;
 }
@@ -66,7 +67,7 @@ export const CLASS_PILL: Record<string, string> = {
 /** What your genotype means given the inheritance (evidence model v2): label, pill class. */
 export const ROLE: Record<string, [string, string]> = {
   carrier: ['Carrier', 'pass'], affected: ['Both copies affected', 'fail'], possible: ['May matter', 'warn'],
-  unknown: ['Unclear', 'soon'],
+  unknown: ['Unclear', 'soon'], common: ['Too common to cause it alone', 'soon'],
 };
 
 /** Inheritance mode codes → glossary terms. */

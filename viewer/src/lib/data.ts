@@ -30,6 +30,11 @@ export function loadDoc<T = any>(m: Manifest, name: string): Promise<T | null> {
   return docCache.get(ref.path)!;
 }
 
+/** The latest `wgs audit` of this release against live sources, if one has been run (not part of the release). */
+export async function loadAudit(m: Manifest): Promise<any | null> {
+  try { return await getJSON(`audits/${m.id}.json`); } catch { return null; }
+}
+
 export function tableUrl(m: Manifest, name: string): string | null {
   const ref = m.tables[name];
   return ref ? DATA + ref.path : null;

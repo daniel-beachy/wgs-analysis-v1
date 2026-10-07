@@ -37,6 +37,23 @@ class Condition:
                 "definition": self.definition, "onset": self.onset, "prevalence": self.prevalence}
 
 
+# ClinGen Actionability scoring key: likelihood of the outcome for a person carrying a pathogenic genotype,
+# and the quality of the evidence behind that number. https://clinicalgenome.org/working-groups/actionability/
+LIKELIHOOD = {3: ("over 40 in 100", 40, 100), 2: ("5 to 39 in 100", 5, 39), 1: ("1 to 4 in 100", 1, 4),
+              0: ("under 1 in 100", 0, 1)}
+LIKELIHOOD_EVIDENCE = {"A": "substantial evidence", "B": "moderate evidence", "C": "minimal evidence",
+                       "D": "poor evidence", "N": "evidence assessed as not applicable"}
+
+
+def penetrance_band(code: str | None) -> dict | None:
+    m = re.match(r"\s*([0-3])\s*([A-DN])?", code or "")
+    if not m:
+        return None
+    text, lo, hi = LIKELIHOOD[int(m.group(1))]
+    return {"code": code.strip(), "text": text, "low": lo, "high": hi,
+            "evidence": LIKELIHOOD_EVIDENCE.get(m.group(2) or "", "evidence level not stated")}
+
+
 class Kb:
     def __init__(self, paths: dict[str, Path | None]):
         con = duckdb.connect()
@@ -80,19 +97,38 @@ class Kb:
             e = self.acmg.setdefault(g, {"category": cat, "conditions": [], "inheritance": inh_, "report": rep})
             e["conditions"].append(cond)
         self.actionability: dict[str, dict] = {}
-        for ctx, gene, disease, outcome, intervention, overall, url in rows(
-                "actionability", "SELECT context, gene, disease, outcome, intervention, overall, url FROM '{p}' "
+        solo: dict[str, tuple] = {}  # gene -> (rank, band) from ratings of that gene alone
+        for ctx, gene, disease, outcome, intervention, overall, url, lik in rows(
+                "actionability", "SELECT context, gene, disease, outcome, intervention, overall, url, likelihood "
+                                 "FROM '{p}' "
                                  "WHERE status = 'Released'"):
             m = re.match(r"(\d+)", overall or "")
             if not m:
                 continue
             score = int(m.group(1))
-            for g in (gene or "").split(","):
-                g = g.strip()
+            genes = [g.strip() for g in (gene or "").split(",") if g.strip()]
+            for g in genes:
                 best = self.actionability.get(g)
                 if best is None or (ctx == "Adult", score) > (best["context"] == "Adult", best["score"]):
                     self.actionability[g] = {"context": ctx, "score": score, "code": overall, "disease": disease,
-                                             "outcome": outcome, "intervention": intervention, "url": url}
+                                             "outcome": outcome, "intervention": intervention, "url": url,
+                                             "genes": genes}
+            # A likelihood rated for several genes together is not a figure for any one of them (e.g. SDHA shares
+            # a paraganglioma rating with SDHB/SDHD, whose penetrance is far higher), so only single-gene ratings
+            # give a penetrance band.
+            band = penetrance_band(lik)
+            if len(genes) == 1 and band:
+                rank = (ctx == "Adult", score)
+                if genes[0] not in solo or rank > solo[genes[0]][0]:
+                    solo[genes[0]] = (rank, {**band, "disease": disease, "outcome": outcome, "url": url,
+                                                 "genes": genes})
+        for g, a in self.actionability.items():
+            a["penetrance"] = solo[g][1] if g in solo else None
+            if a["penetrance"] is None and len(a["genes"]) > 1:
+                others = [x for x in a["genes"] if x != g]
+                group = ", ".join(others) if len(others) <= 4 else f"{len(others)} other genes"
+                a["penetrance_note"] = (f"ClinGen rated how often this leads to disease for {g} together with "
+                                        f"{group}, so there is no figure for {g} alone")
         self.constraint = {g: {"loeuf": lo, "pli": pli, "mis_z": mz} for g, lo, pli, mz in
                            rows("constraint", "SELECT gene, loeuf, pli, mis_z FROM '{p}'")}
 

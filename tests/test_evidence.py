@@ -95,7 +95,25 @@ def test_majority_allele_note():
     assert _alt_is_major({"af_1kg": 0.26, "gnomad_popmax_af": 0.6}) is None
     assert _alt_is_major({"af_1kg": None, "gnomad_popmax_af": 0.7})[1].startswith("gnomAD")
     assert _alt_is_major({"af_1kg": None, "gnomad_popmax_af": None}) is None
-    assert "do not carry" in _major_note((0.99, "x"), 2)
+    note = _major_note((0.99, "x"), 2, ["no_sequence_alteration"])
+    # Only sourced facts: never infer which allele "the effect" belongs to (it contradicted risk-factor claims)
+    assert "do not carry" not in note and "most common one" in note and "no sequence alteration" in note
+    assert "most common" not in _major_note((0.6, "x"), 1)
+
+
+def test_ba1_withholds_rare_disease_roles():
+    from wgs import evidence as ev
+    assert ev.too_common(popmax_af=0.07, kg_af=0.02, stars=1).startswith("Carried on up to 7%")
+    assert ev.too_common(popmax_af=0.04, kg_af=0.02, stars=1) is None
+    assert ev.too_common(popmax_af=0.08, kg_af=None, stars=3) is None   # expert panel already weighed frequency
+
+
+def test_predicted_wording_respects_existing_clinvar_entry():
+    from wgs import evidence as ev
+    kw = dict(consequence="missense", am_score=0.9, revel=0.95, loeuf=None, popmax_af=None, kg_af=None,
+              recessive_gene=False)
+    assert "no lab" in ev.predicted_evidence(**kw)[1][-1]
+    assert "uncertain significance (1★)" in ev.predicted_evidence(**kw, clinvar="uncertain significance (1★)")[1][-1]
 
 
 def test_conflict_and_condition_text_is_stable():

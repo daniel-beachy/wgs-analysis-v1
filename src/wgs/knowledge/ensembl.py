@@ -57,3 +57,41 @@ class Ensembl(Source):
           TO '{dst}' (FORMAT parquet, COMPRESSION zstd)""")
         return Built(version="GRCh37.87", tables={"genes": dst}, upstream=upstream,
                      notes={"files": ["annotation.gff3.gz"]})
+
+
+MANE_DIR = "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/current/"
+
+
+class Mane(Source):
+    id = "mane"
+    title = "MANE Select transcripts (NCBI & EMBL-EBI)"
+    homepage = "https://www.ncbi.nlm.nih.gov/refseq/MANE/"
+    licence = "Public domain (NCBI) / no restrictions (EMBL-EBI)"
+    cadence = "a few releases a year"
+    description = ("The one agreed 'standard' transcript per gene that clinical labs use to name protein changes "
+                   "(e.g. GALT p.Asn314Asp), so names here match papers and lab reports.")
+
+    def probe(self, pin: str | None = None) -> list[Upstream]:
+        import re
+
+        from .http import listing
+        names = sorted(set(re.findall(r'href="(MANE\.GRCh38\.v[\d.]+\.summary\.txt\.gz)"', listing(MANE_DIR))))
+        if not names:
+            raise RuntimeError(f"no MANE summary file found at {MANE_DIR}")
+        return [head(MANE_DIR + names[-1])]
+
+    def build(self, upstream: list[Upstream], scratch: Path, out: Path) -> Built:
+        import re
+
+        src = fetch(upstream[0].url, scratch / "mane.summary.txt.gz", upstream[0].size)
+        dst = out / "transcripts.parquet"
+        duckdb.connect().execute(f"""
+          COPY (SELECT split_part("Ensembl_nuc", '.', 1) AS transcript, symbol AS gene, "RefSeq_nuc" AS refseq,
+                       "Ensembl_prot" AS ensembl_prot, "RefSeq_prot" AS refseq_prot, "MANE_status" AS status
+                FROM read_csv('{src}', delim='\t', header=true, all_varchar=true)
+                ORDER BY transcript)
+          TO '{dst}' (FORMAT parquet)""")
+        version = re.search(r"v([\d.]+)\.summary", upstream[0].url).group(1)
+        return Built(version=version, tables={"transcripts": dst}, upstream=upstream,
+                     notes={"citation": "Morales J, et al. A joint NCBI and EMBL-EBI transcript set for clinical "
+                                        "genomics and research. Nature. 2022;604:310-315."})

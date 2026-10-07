@@ -5,6 +5,7 @@
   import { query, useRelease, sqlString, type Row } from '../lib/db';
   import { OVERALL_PILL, CALL_PILL } from '../lib/evidence';
   import Term from './Term.svelte';
+  import AbsRisk from './AbsRisk.svelte';
 
   let { m, section, sex, featured = true, empty = 'No polygenic scores for this section in this release.' }:
     { m: Manifest; section: string; sex?: string; featured?: boolean; empty?: string } = $props();
@@ -33,7 +34,7 @@
   const main = $derived(rows.filter((r) => r.featured && sexOk(r)));
   const other = $derived(rows.filter((r) => !r.featured || !sexOk(r)));
   const shown = $derived(featured ? (browse ? [...main, ...other] : main) : rows);
-  const nth = (p: number) => { const n = Math.round(p); const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as any)[n % 10] ?? 'th'; return `${n}${s}`; };
+  const nth = (p: number) => { if (p < 0.5) return 'below 1st'; if (p > 99.5) return 'above 99th'; const n = Math.round(p); const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as any)[n % 10] ?? 'th'; return `${n}${s}`; };
   const band = (p: number) => (p >= 95 ? 'top 5%' : p >= 80 ? 'upper range' : p <= 5 ? 'bottom 5%' : p <= 20 ? 'lower range' : 'middle range');
   const POP: Record<string, string> = { EUR: 'European', AFR: 'African', EAS: 'East Asian', SAS: 'South Asian', AMR: 'admixed American' };
   const doi = (d: string | null) => (d ? `https://doi.org/${d}` : null);
@@ -60,6 +61,7 @@
             {#if p != null}
               <div class="track"><span class="mid"></span><span class="mark" style:left="{p}%"></span></div>
               <div class="small"><strong>{nth(p)}</strong> <span class="faint">percentile · {band(p)}</span></div>
+              <AbsRisk a={r.abs_risk} compact />
             {:else}<div class="small faint">not scored</div>{/if}
           </div>
           <div class="pills">
@@ -69,7 +71,8 @@
         {#if open === r.pgs_id}
           <div class="detail small">
             {#if r.trait_description}<p>{r.trait_description}{#if r.trait_url}{' '}<a href={r.trait_url} target="_blank" rel="noreferrer">ontology</a>{/if}</p>{/if}
-            {#if p != null}<p>Your score is higher than about <strong>{Math.round(p)}%</strong> of the {POP[r.compared_with] ?? r.compared_with ?? 'reference'} reference group (1000 Genomes) — people whose DNA is most like yours. A higher percentile means more of the variants that push “{r.trait_reported ?? r.label}” up.</p>{/if}
+            {#if p != null}<p>Your score is {#if p < 0.5}lower than <strong>over 99%</strong>{:else}higher than about <strong>{Math.round(p)}%</strong>{/if} of the {POP[r.compared_with] ?? r.compared_with ?? 'reference'} reference group (1000 Genomes) — people whose DNA is most like yours. A higher percentile means more of the variants that push “{r.trait_reported ?? r.label}” up.</p>{/if}
+            <AbsRisk a={r.abs_risk} />
             {#if r.eval_effect}<p><strong>How much the score explains:</strong> {r.eval_effect}{r.eval_n ? ` in ${r.eval_n.toLocaleString()} people` : ''}{r.eval_ancestry ? ` of ${r.eval_ancestry.replace(/^./, (c: string) => c.toUpperCase())} ancestry` : ''}{r.eval_author ? ` (${r.eval_author}${r.eval_published ? `, ${String(r.eval_published).slice(0, 4)}` : ''}${r.eval_independent ? ', independent study' : ', score authors’ own study'})` : ''}.</p>{/if}
             <div class="grid cols-3">
               <div><div class="faint"><Term t="Evidence grade" label="Evidence" />: <span class="pill {OVERALL_PILL[r.evidence_level]}">{r.evidence_level}</span></div><ul>{#each r.evidence_reasons ?? [] as x}<li>{x}</li>{/each}</ul></div>
@@ -77,9 +80,9 @@
               <div><div class="faint">About the score</div><ul>
                 {#if r.name}<li>{r.name}{r.method ? ` — ${r.method}` : ''}</li>{/if}
                 {#if r.ancestry_gwas}<li>Built from: {ancestryMix(r.ancestry_gwas)}</li>{/if}
-                {#if r.matched != null}<li>{r.matched.toLocaleString()} of {r.total?.toLocaleString()} variants found in your data</li>{/if}
+                {#if r.matched != null}<li>{r.matched.toLocaleString()} of {r.total?.toLocaleString()} score positions readable in your data (your genotype was measured there; most are the common version, which is expected; coverage this high is what makes the score reliable)</li>{/if}
                 {#if r.why}<li>Chosen because: {r.why}</li>{/if}
-                <li>{#if r.first_author}{r.first_author}{r.published ? ` (${String(r.published).slice(0, 4)})` : ''}{r.journal ? `, ${r.journal}` : ''} · {/if}<a href={`https://www.pgscatalog.org/score/${r.pgs_id}/`} target="_blank" rel="noreferrer">PGS Catalog</a>{#if doi(r.doi)} · <a href={doi(r.doi)} target="_blank" rel="noreferrer">paper</a>{/if}</li>
+                <li>{#if r.first_author}{r.first_author}{r.published ? ` (${String(r.published).slice(0, 4)})` : ''}{r.journal ? `, ${r.journal}` : ''}{' · '}{/if}<a href={`https://www.pgscatalog.org/score/${r.pgs_id}/`} target="_blank" rel="noreferrer">PGS Catalog</a>{#if doi(r.doi)}{' · '}<a href={doi(r.doi)} target="_blank" rel="noreferrer">paper</a>{/if}</li>
               </ul></div>
             </div>
           </div>

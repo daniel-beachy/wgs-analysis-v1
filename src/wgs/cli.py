@@ -325,6 +325,19 @@ def knowledge_refresh(
         raise typer.Exit(1)
 
 
+@app.command("audit")
+def audit_cmd(
+    release: str = typer.Option(None, "--release", "-r", help="Release ID (default: newest)."),
+    only: list[str] = typer.Option(None, "--only", help="clinvar | gwas | pgs | pubmed | links (repeatable)."),
+    link_sample: int = typer.Option(40, help="Per-record links to spot-check (all other links are checked)."),
+):
+    """Re-verify a release against the live sources it cites; writes a dated report shown in the QC section."""
+    from . import audit
+
+    res = audit.run(_cfg(), release=release, only=only or None, link_sample=link_sample)
+    raise typer.Exit(1 if any(p["status"] == "mismatch" for p in res["problems"]) else 0)
+
+
 @app.command("query")
 def query_cmd(
     sql: str = typer.Argument(None, help="SQL to run; '-' reads it from stdin. Omit to list the tables."),
@@ -349,8 +362,9 @@ def query_cmd(
     con = duckdb.connect()
     for name, t in m["tables"].items():
         con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{(rd / t['path']).as_posix()}')")
-    for name, d in m.get("documents", {}).items():
-        path = rd / (d["path"] if isinstance(d, dict) else d)
+    docs = {name: rd / (d["path"] if isinstance(d, dict) else d) for name, d in m.get("documents", {}).items()}
+    docs = {name: path for name, path in docs.items() if path.suffix == ".json"}
+    for name, path in docs.items():
         con.execute(f"CREATE VIEW doc_{name} AS SELECT * FROM read_json_auto('{path.as_posix()}')")
     # Read-only sandbox: only this release folder is readable, nothing can be written.
     con.execute(f"SET allowed_directories = ['{rd.as_posix()}/']")
@@ -360,7 +374,7 @@ def query_cmd(
         console.print(f"Release [bold]{rel['id']}[/] · sample {m['sample']}")
         for name, t in m["tables"].items():
             console.print(f"  [cyan]{name}[/] ({t['rows']:,} rows) — {t.get('description', '')}")
-        console.print("  Documents (JSON) as views: " + ", ".join(f"doc_{d}" for d in m.get("documents", {})))
+        console.print("  Documents (JSON) as views: " + ", ".join(f"doc_{d}" for d in docs))
         return
     stmts = con.extract_statements(sql)
     if len(stmts) != 1 or stmts[0].type != duckdb.StatementType.SELECT:

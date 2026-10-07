@@ -1,0 +1,851 @@
+# Cited baseline risks and confirmed per-SD effect sizes for absolute-risk estimates (ADR-018).
+#
+# Policy: hand-maintained, changes rarely. Every row quotes its source verbatim; `wgs audit --only curated` re-fetches
+# each source and fails a row whose quoted numbers no longer appear there. No row may be added without a quote.
+#   [[baseline]] measure = "lifetime_risk" (cumulative risk over age_window) or "prevalence" (share who have/had it;
+#                used only where no lifetime risk could be verified, and labelled as prevalence in the dashboard).
+#   [[per_sd]]   an odds/hazard ratio the paper itself states is per standard deviation of this PGS.
+# Hand-maintained, cited baseline risk + per-SD confirmation table
+# Compiled 2026-10-07. Every row's `quote` is a verbatim string copied from a
+# directly fetched source (SEER/PubMed/PMC/EuropePMC/CDC/NIAID/PGS Catalog).
+# Rows omitted (not fabricated) when no verifiable number could be found.
+
+# =====================================================================
+# PART 1: Population lifetime risk (baseline)
+# =====================================================================
+
+[[baseline]]
+disease = "asthma"
+efo = "EFO_0000270"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.350
+age_window = "from birth to age 79 yr"
+population = "General population, Ontario, Canada (population-based administrative cohort, 1996-2007)"
+source = "To T, Wang C, Guan J, McLimont S, Gershon AS. Am J Respir Crit Care Med. 2010;181(4):337-43."
+pmid = "19926867"
+url = "https://pubmed.ncbi.nlm.nih.gov/19926867/"
+quote = "Overall, the lifetime risk of physician-diagnosed asthma was 33.9%. Whereas the overall lifetime risk was higher in females (35.0 vs. 32.9%; P < 0.001), the cumulative risk was higher in males in early years."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "asthma"
+efo = "EFO_0000270"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.329
+age_window = "from birth to age 79 yr"
+population = "General population, Ontario, Canada"
+source = "To T, Wang C, Guan J, McLimont S, Gershon AS. Am J Respir Crit Care Med. 2010;181(4):337-43."
+pmid = "19926867"
+url = "https://pubmed.ncbi.nlm.nih.gov/19926867/"
+quote = "Whereas the overall lifetime risk was higher in females (35.0 vs. 32.9%; P < 0.001)"
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "asthma"
+efo = "EFO_0000270"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.339
+age_window = "from birth to age 79 yr"
+population = "General population, Ontario, Canada"
+source = "To T, Wang C, Guan J, McLimont S, Gershon AS. Am J Respir Crit Care Med. 2010;181(4):337-43."
+pmid = "19926867"
+url = "https://pubmed.ncbi.nlm.nih.gov/19926867/"
+quote = "Overall, the lifetime risk of physician-diagnosed asthma was 33.9%."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "hypertension"
+efo = "EFO_0000537"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.90
+age_window = "residual lifetime risk from age 55 or 65 years to death"
+population = "Framingham Heart Study, Massachusetts, USA, predominantly European ancestry (n=1298, age 55-65 at baseline)"
+source = "Vasan RS, Beiser A, Seshadri S, et al. JAMA. 2002;287(8):1003-10."
+pmid = "11866648"
+url = "https://pubmed.ncbi.nlm.nih.gov/11866648/"
+quote = "The residual lifetime risks for developing hypertension and stage 1 high blood pressure or higher (>=140/90 mm Hg regardless of treatment) were 90% in both 55- and 65-year-old participants."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "age-related macular degeneration"
+efo = "EFO_0001365"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.331
+ci_low = 0.306
+ci_high = 0.356
+age_window = "lifetime risk, Rotterdam Study follow-up April 1990-June 2014, baseline mean age 65.1"
+population = "Rotterdam Study, the Netherlands, European ancestry (n=11,260, 58.7% women; reference/no-diabetes-medication group)"
+source = "Vergroesen JE, Thee EF, Ahmadizar F, et al. JAMA Ophthalmol. 2022;140(7):674-681."
+pmid = "35587864"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC9121302/"
+quote = "the lifetime risk of AMD was lower for individuals taking other diabetes medication (17.0%; 95% CI, 5.8%-26.8% vs 33.1%; 95% CI, 30.6%-35.6%)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "atopic eczema"
+efo = "EFO_0000274"
+sex = "both"
+measure = "prevalence"
+value = 0.30
+age_window = "undefined age window, cross-sectional"
+population = "U.S. general population"
+source = "National Institute of Allergy and Infectious Diseases (NIAID), Eczema (Atopic Dermatitis) disease page"
+url = "https://www.niaid.nih.gov/diseases-conditions/eczema-atopic-dermatitis"
+quote = "It affects an estimated 30 percent of the U.S. population."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "atrial fibrillation"
+efo = "EFO_0000275"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.260
+ci_low = 0.240
+ci_high = 0.270
+age_window = "from index age 40 years to age 95 years"
+population = "Framingham Heart Study, Massachusetts, USA, predominantly European ancestry"
+source = "Lloyd-Jones DM, Wang TJ, Leip EP, et al. Circulation. 2004;110(9):1042-6."
+pmid = "15313941"
+url = "https://pubmed.ncbi.nlm.nih.gov/15313941/"
+quote = "At age 40 years, lifetime risks for AF were 26.0% (95% CI, 24.0% to 27.0%) for men and 23.0% (21.0% to 24.0%) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "atrial fibrillation"
+efo = "EFO_0000275"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.230
+ci_low = 0.210
+ci_high = 0.240
+age_window = "from index age 40 years to age 95 years"
+population = "Framingham Heart Study, Massachusetts, USA, predominantly European ancestry"
+source = "Lloyd-Jones DM, Wang TJ, Leip EP, et al. Circulation. 2004;110(9):1042-6."
+pmid = "15313941"
+url = "https://pubmed.ncbi.nlm.nih.gov/15313941/"
+quote = "At age 40 years, lifetime risks for AF were 26.0% (95% CI, 24.0% to 27.0%) for men and 23.0% (21.0% to 24.0%) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "breast carcinoma"
+efo = "MONDO_0007254"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.130
+age_window = "lifetime, based on 2021-2023 data"
+population = "U.S. general female population (SEER registries)"
+source = "National Cancer Institute, SEER Cancer Stat Facts: Female Breast Cancer"
+url = "https://seer.cancer.gov/statfacts/html/breast.html"
+quote = "Approximately 13.0 percent of women will be diagnosed with female breast cancer at some point during their lifetime, based on 2021-2023 data."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "celiac disease"
+efo = "EFO_0001060"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.023
+age_window = "lifetime, nationwide registry cohort 1990-2015 (biopsy-verified)"
+population = "Nationwide population-based cohort, Sweden"
+source = "Bergman D, King J, Lebwohl B, et al. Gut. 2022;71(6):1088-1094."
+pmid = "34321220"
+url = "https://pubmed.ncbi.nlm.nih.gov/34321220/"
+quote = "The lifetime risk of developing CD was 1.8% (2.3% in females and 1.4% in males). Across a lifetime, 1 in 44 females and 1 in 72 males are expected to be diagnosed with CD in Sweden."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "celiac disease"
+efo = "EFO_0001060"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.014
+age_window = "lifetime, nationwide registry cohort 1990-2015 (biopsy-verified)"
+population = "Nationwide population-based cohort, Sweden"
+source = "Bergman D, King J, Lebwohl B, et al. Gut. 2022;71(6):1088-1094."
+pmid = "34321220"
+url = "https://pubmed.ncbi.nlm.nih.gov/34321220/"
+quote = "The lifetime risk of developing CD was 1.8% (2.3% in females and 1.4% in males)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "celiac disease"
+efo = "EFO_0001060"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.018
+age_window = "lifetime, nationwide registry cohort 1990-2015 (biopsy-verified)"
+population = "Nationwide population-based cohort, Sweden"
+source = "Bergman D, King J, Lebwohl B, et al. Gut. 2022;71(6):1088-1094."
+pmid = "34321220"
+url = "https://pubmed.ncbi.nlm.nih.gov/34321220/"
+quote = "The lifetime risk of developing CD was 1.8% (2.3% in females and 1.4% in males)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "colorectal cancer"
+efo = "EFO_0004142"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.039
+age_window = "lifetime, based on 2021-2023 data"
+population = "U.S. general population (SEER registries)"
+source = "National Cancer Institute, SEER Cancer Stat Facts: Colorectal Cancer"
+url = "https://seer.cancer.gov/statfacts/html/colorect.html"
+quote = "Approximately 3.9 percent of men and women will be diagnosed with colorectal cancer at some point during their lifetime, based on 2021-2023 data."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "melanoma"
+efo = "EFO_0000756"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.022
+age_window = "lifetime, based on 2021-2023 data"
+population = "U.S. general population (SEER registries)"
+source = "National Cancer Institute, SEER Cancer Stat Facts: Melanoma of the Skin"
+url = "https://seer.cancer.gov/statfacts/html/melan.html"
+quote = "Approximately 2.2 percent of men and women will be diagnosed with melanoma of the skin at some point during their lifetime, based on 2021-2023 data."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "coronary artery disease"
+efo = "EFO_0001645"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.486
+ci_low = 0.458
+ci_high = 0.513
+age_window = "from age 40 years, remaining lifetime"
+population = "Framingham Heart Study, Massachusetts, USA, predominantly European ancestry (n=7733, examined 1971-1975, age 40-94)"
+source = "Lloyd-Jones DM, Larson MG, Beiser A, Levy D. Lancet. 1999;353(9147):89-92."
+pmid = "10023892"
+url = "https://pubmed.ncbi.nlm.nih.gov/10023892/"
+quote = "Lifetime risk of coronary heart disease at age 40 years was 48.6% (95% CI 45.8-51.3) for men and 31.7% (29.2-34.2) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "coronary artery disease"
+efo = "EFO_0001645"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.317
+ci_low = 0.292
+ci_high = 0.342
+age_window = "from age 40 years, remaining lifetime"
+population = "Framingham Heart Study, Massachusetts, USA, predominantly European ancestry"
+source = "Lloyd-Jones DM, Larson MG, Beiser A, Levy D. Lancet. 1999;353(9147):89-92."
+pmid = "10023892"
+url = "https://pubmed.ncbi.nlm.nih.gov/10023892/"
+quote = "Lifetime risk of coronary heart disease at age 40 years was 48.6% (95% CI 45.8-51.3) for men and 31.7% (29.2-34.2) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "chronic kidney disease"
+efo = "EFO_0003884"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.413
+ci_low = 0.385
+ci_high = 0.440
+age_window = "from age 50 years to age 90 years"
+population = "Framingham Offspring Study, Massachusetts, USA (n=3362, 52% women, mean baseline age 54)"
+source = "McMahon GM, Hwang SJ, Fox CS. Nephrol Dial Transplant. 2017;32(10):1705-1709."
+pmid = "27358274"
+url = "https://pubmed.ncbi.nlm.nih.gov/27358274/"
+quote = "At age 50 years, the cumulative lifetime risk of CKD was 41.3% [95% confidence interval (CI) 38.5-44.0]."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "gout"
+efo = "EFO_0004274"
+sex = "male"
+measure = "prevalence"
+value = 0.059
+age_window = "point prevalence, 2007-2008, cross-sectional"
+population = "NHANES 2007-2008, nationally representative U.S. adults (n=5707)"
+source = "Zhu Y, Pandya BJ, Choi HK. Arthritis Rheum. 2011;63(10):3136-41."
+pmid = "21800283"
+url = "https://pubmed.ncbi.nlm.nih.gov/21800283/"
+quote = "The prevalence among men was 5.9% (6.1 million)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "gout"
+efo = "EFO_0004274"
+sex = "female"
+measure = "prevalence"
+value = 0.020
+age_window = "point prevalence, 2007-2008, cross-sectional"
+population = "NHANES 2007-2008, nationally representative U.S. adults"
+source = "Zhu Y, Pandya BJ, Choi HK. Arthritis Rheum. 2011;63(10):3136-41."
+pmid = "21800283"
+url = "https://pubmed.ncbi.nlm.nih.gov/21800283/"
+quote = "The prevalence among women was 2.0% (2.2 million)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "gout"
+efo = "EFO_0004274"
+sex = "both"
+measure = "prevalence"
+value = 0.039
+age_window = "point prevalence, 2007-2008, cross-sectional"
+population = "NHANES 2007-2008, nationally representative U.S. adults"
+source = "Zhu Y, Pandya BJ, Choi HK. Arthritis Rheum. 2011;63(10):3136-41."
+pmid = "21800283"
+url = "https://pubmed.ncbi.nlm.nih.gov/21800283/"
+quote = "The prevalence of gout among US adults in 2007-2008 was 3.9% (8.3 million individuals)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "inflammatory bowel disease"
+efo = "EFO_0003767"
+sex = "both"
+measure = "prevalence"
+value = 0.00825
+age_window = "point prevalence, 2023"
+population = "Canada (national population), CanGIEC consortium"
+source = "Coward S, Benchimol EI, Kuenzig ME, et al. J Can Assoc Gastroenterol. 2023;6(Suppl 2):S9-S15."
+pmid = "37674492"
+url = "https://pubmed.ncbi.nlm.nih.gov/37674492/"
+quote = "The prevalence in 2023 is estimated at 825 per 100,000, meaning that over 320,000 people in Canada are living with IBD."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "multiple sclerosis"
+efo = "EFO_0003885"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.00282
+age_window = "lifetime, 1966 birth-year cohort"
+population = "Dutch population-based birth-year cohort (born 1966, Netherlands)"
+source = "Loonstra FC, Alvarez Sirvent D, Tesi N, et al. Neurology. 2024;103(7):e209663."
+pmid = "39270152"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC11399064/"
+quote = "We identified 452 pwMS in the 1966 cohort (73% female), which translates to a lifetime risk estimate of 282 per 100,000 in women (329/116,745) and 100 per 100,000 in men (123/122,866)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "multiple sclerosis"
+efo = "EFO_0003885"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.00100
+age_window = "lifetime, 1966 birth-year cohort"
+population = "Dutch population-based birth-year cohort (born 1966, Netherlands)"
+source = "Loonstra FC, Alvarez Sirvent D, Tesi N, et al. Neurology. 2024;103(7):e209663."
+pmid = "39270152"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC11399064/"
+quote = "...100 per 100,000 in men (123/122,866)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "knee osteoarthritis"
+efo = "EFO_0004616"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.447
+ci_low = 0.400
+ci_high = 0.493
+age_window = "by age 85 years"
+population = "Johnston County Osteoarthritis Project, Black and White men/women age >=45, North Carolina, USA"
+source = "Murphy L, Schwartz TA, Helmick CG, et al. Arthritis Rheum. 2008;59(9):1207-1213."
+pmid = "18759314"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4516049/"
+quote = "The lifetime risk of symptomatic knee OA was 44.7% (95% confidence interval [95% CI] 40.0-49.3%)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "prostate carcinoma"
+efo = "EFO_0001663"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.132
+age_window = "lifetime, based on 2021-2023 data"
+population = "U.S. general male population (SEER registries)"
+source = "National Cancer Institute, SEER Cancer Stat Facts: Prostate Cancer"
+url = "https://seer.cancer.gov/statfacts/html/prost.html"
+quote = "Approximately 13.2 percent of men will be diagnosed with prostate cancer at some point during their lifetime, based on 2021-2023 data."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "psoriasis"
+efo = "EFO_0000676"
+sex = "both"
+measure = "prevalence"
+value = 0.079
+age_window = "lifetime, self-reported, adults >=18"
+population = "Danish Skin Cohort, random sample of Danish general-population adults (n=3490)"
+source = "Egeberg A, et al. BMJ Open. 2019."
+url = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6475143/"
+quote = "The lifetime-prevalence of self-reported psoriasis was found to be 7.9%, whereas the 1-year prevalence (ie, currently active psoriasis) was 5.0%."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "rheumatoid arthritis"
+efo = "EFO_0000685"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.036
+age_window = "lifetime, adult-onset (age >=18)"
+population = "Olmsted County, Minnesota, USA (Rochester Epidemiology Project), predominantly White/European ancestry"
+source = "Crowson CS, Matteson EL, Myasoedova E, et al. Arthritis Rheum. 2011;63(3):633-639."
+pmid = "21360492"
+url = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3078757/"
+quote = "The lifetime risk of RA developing in US adults is 3.6% for women and 1.7% for men."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "rheumatoid arthritis"
+efo = "EFO_0000685"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.017
+age_window = "lifetime, adult-onset (age >=18)"
+population = "Olmsted County, Minnesota, USA (Rochester Epidemiology Project), predominantly White/European ancestry"
+source = "Crowson CS, Matteson EL, Myasoedova E, et al. Arthritis Rheum. 2011;63(3):633-639."
+pmid = "21360492"
+url = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3078757/"
+quote = "The lifetime risk of RA developing in US adults is 3.6% for women and 1.7% for men."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "stroke"
+efo = "EFO_0000712"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.20
+age_window = "lifetime risk, assessed from age 55 (similar at 65 and 75)"
+population = "Framingham Heart Study Original Cohort, Massachusetts, USA (n=4897, stroke/dementia-free at age 55), followed up to 51 years"
+source = "Seshadri S, Beiser A, Kelly-Hayes M, et al. Stroke. 2006;37(2):345-350."
+pmid = "16397184"
+url = "https://pubmed.ncbi.nlm.nih.gov/16397184/"
+quote = "LTR of stroke was high and remained similar at ages 55, 65, and 75 years, approximating 1 in 5 for women and 1 in 6 for men."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "stroke"
+efo = "EFO_0000712"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.167
+age_window = "lifetime risk, assessed from age 55 (similar at 65 and 75)"
+population = "Framingham Heart Study Original Cohort, Massachusetts, USA"
+source = "Seshadri S, Beiser A, Kelly-Hayes M, et al. Stroke. 2006;37(2):345-350."
+pmid = "16397184"
+url = "https://pubmed.ncbi.nlm.nih.gov/16397184/"
+quote = "LTR of stroke was high and remained similar at ages 55, 65, and 75 years, approximating 1 in 5 for women and 1 in 6 for men."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "type 1 diabetes"
+efo = "EFO_0001359"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.004
+age_window = "lifetime (general-population baseline cited in context of familial risk)"
+population = "General population baseline cited in a T1D screening review (NIDDK Type 1 Diabetes TrialNet Study Group)"
+source = "Sims EK, Besser REJ, Dayan C, et al. Diabetes. 2022;71(4):610-623."
+pmid = "35316839"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC9114719/"
+quote = "Siblings of patients have, on average, a 6-7% lifetime risk of type 1 diabetes, and offspring of mothers and fathers with type 1 diabetes have a 1.3-4% and 6-9% lifetime risk, respectively, compared with 0.4% in the general population (8-10)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "type 2 diabetes"
+efo = "EFO_0001360"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.402
+ci_low = 0.392
+ci_high = 0.413
+age_window = "from age 20 years, based on 2000-2011 data"
+population = "U.S. adults, National Health Interview Survey cohort (n=598,216)"
+source = "Gregg EW, Zhuo X, Cheng YJ, et al. Lancet Diabetes Endocrinol. 2014;2(11):867-874."
+pmid = "25128274"
+url = "https://pubmed.ncbi.nlm.nih.gov/25128274/"
+quote = "On the basis of 2000-11 data, lifetime risk of diagnosed diabetes from age 20 years was 40.2% (95% CI 39.2-41.3) for men and 39.6% (38.6-40.5) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "type 2 diabetes"
+efo = "EFO_0001360"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.396
+ci_low = 0.386
+ci_high = 0.405
+age_window = "from age 20 years, based on 2000-2011 data"
+population = "U.S. adults, National Health Interview Survey cohort (n=598,216)"
+source = "Gregg EW, Zhuo X, Cheng YJ, et al. Lancet Diabetes Endocrinol. 2014;2(11):867-874."
+pmid = "25128274"
+url = "https://pubmed.ncbi.nlm.nih.gov/25128274/"
+quote = "On the basis of 2000-11 data, lifetime risk of diagnosed diabetes from age 20 years was 40.2% (95% CI 39.2-41.3) for men and 39.6% (38.6-40.5) for women."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "venous thromboembolism"
+efo = "EFO_0004286"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.093
+age_window = "cumulative incidence by age 100, accounting for competing risk of death"
+population = "Danish nationwide cohort, >5 million persons, 1995-2016"
+source = "Arnesen CAL, Veres K, Horvath-Puho E, et al. Eur J Epidemiol. 2022;37(2):195-203."
+pmid = "34746973"
+url = "https://pubmed.ncbi.nlm.nih.gov/34746973/"
+quote = "The cumulative incidence of VTE was 1.9% in women and 1.3% in men at age 50, 4.3% in women and 4.4% in men at age 70, and 9.3% in women and 8.1% in men at age 100."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "venous thromboembolism"
+efo = "EFO_0004286"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.081
+age_window = "cumulative incidence by age 100, accounting for competing risk of death"
+population = "Danish nationwide cohort, >5 million persons, 1995-2016"
+source = "Arnesen CAL, Veres K, Horvath-Puho E, et al. Eur J Epidemiol. 2022;37(2):195-203."
+pmid = "34746973"
+url = "https://pubmed.ncbi.nlm.nih.gov/34746973/"
+quote = "The cumulative incidence of VTE was 1.9% in women and 1.3% in men at age 50, 4.3% in women and 4.4% in men at age 70, and 9.3% in women and 8.1% in men at age 100."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "Alzheimer's disease / dementia"
+efo = "EFO_0000249"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.167
+age_window = "remaining lifetime from age >=55"
+population = "Rotterdam Study, the Netherlands (n=7983, age >=55); NOTE: all-cause dementia, not Alzheimer's-specific"
+source = "Breteler MM, Ott A, Hofman A. Haemostasis. 1998;28(3-4):117-123."
+pmid = "10420059"
+url = "https://pubmed.ncbi.nlm.nih.gov/10420059/"
+quote = "One in 6 men, and almost 1 in 3 women, will suffer at least some of their lifetime from dementia."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "Alzheimer's disease / dementia"
+efo = "EFO_0000249"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.333
+age_window = "remaining lifetime from age >=55"
+population = "Rotterdam Study, the Netherlands (n=7983, age >=55); NOTE: all-cause dementia, not Alzheimer's-specific"
+source = "Breteler MM, Ott A, Hofman A. Haemostasis. 1998;28(3-4):117-123."
+pmid = "10420059"
+url = "https://pubmed.ncbi.nlm.nih.gov/10420059/"
+quote = "One in 6 men, and almost 1 in 3 women, will suffer at least some of their lifetime from dementia."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "Parkinson's disease"
+efo = "EFO_0002508"
+sex = "male"
+measure = "lifetime_risk"
+value = 0.020
+age_window = "lifetime risk from birth"
+population = "Olmsted County, Minnesota, USA (incidence 1976-1990 applied to MN mortality life table)"
+source = "Elbaz A, Bower JH, Maraganore DM, et al. J Clin Epidemiol. 2002;55(1):25-31."
+pmid = "11781119"
+url = "https://pubmed.ncbi.nlm.nih.gov/11781119/"
+quote = "The lifetime risk of developing parkinsonism from birth was 4.4% for men and 3.7% for women (ratio = 1.2). The corresponding risk of developing PD was 2.0% for men and 1.3% for women (ratio = 1.5)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "Parkinson's disease"
+efo = "EFO_0002508"
+sex = "female"
+measure = "lifetime_risk"
+value = 0.013
+age_window = "lifetime risk from birth"
+population = "Olmsted County, Minnesota, USA (incidence 1976-1990 applied to MN mortality life table)"
+source = "Elbaz A, Bower JH, Maraganore DM, et al. J Clin Epidemiol. 2002;55(1):25-31."
+pmid = "11781119"
+url = "https://pubmed.ncbi.nlm.nih.gov/11781119/"
+quote = "The corresponding risk of developing PD was 2.0% for men and 1.3% for women (ratio = 1.5)."
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "schizophrenia"
+efo = "EFO_0000692"
+sex = "both"
+measure = "lifetime_risk"
+value = 0.0072
+ci_low = 0.0031
+ci_high = 0.0271
+age_window = "lifetime morbid risk (not age-anchored; pooled median across studies)"
+population = "Global systematic review, 188 core studies, 46 countries, 1965-2002 (not restricted to European ancestry)"
+source = "Saha S, Chant D, Welham J, McGrath J. PLoS Med. 2005;2(5):e141."
+pmid = "15916472"
+url = "https://pubmed.ncbi.nlm.nih.gov/15916472/"
+quote = "The median values per 1,000 persons (10%-90% quantiles) for the distributions for point, period, lifetime, and lifetime morbid risk were 4.6 (1.9-10.0), 3.3 (1.3-8.2), 4.0 (1.6-12.1), and 7.2 (3.1-27.1), respectively... we found no significant difference (a) between males and females"
+retrieved = "2026-10-07"
+
+[[baseline]]
+disease = "major depression"
+efo = "EFO_0003761"
+sex = "both"
+measure = "prevalence"
+value = 0.171
+age_window = "lifetime, ages 15-54 at interview"
+population = "US national community sample (n=8098, ages 15-54), National Comorbidity Survey"
+source = "Blazer DG, Kessler RC, McGonagle KA, Swartz MS. Am J Psychiatry. 1994;151(7):979-986."
+pmid = "8010383"
+url = "https://pubmed.ncbi.nlm.nih.gov/8010383/"
+quote = "The prevalence estimate for lifetime major depression was 17.1%, with a similar demographic distribution."
+retrieved = "2026-10-07"
+
+# NOT FOUND (no verifiable lifetime-risk number located, omitted rather than fabricated):
+# - glaucoma: no clean single population-average lifetime-risk figure from a directly fetched
+#   source; only genetically-stratified (FinnGen) and an old Rotterdam Study familial-relative
+#   proxy (2.3%, not a general-population denominator) were found.
+
+# =====================================================================
+# PART 2: Per-standard-deviation confirmation for PGS effect sizes
+# =====================================================================
+
+[[per_sd]]
+pgs_id = "PGS000013"
+ppm_id = "PPM000930"
+metric = "HR"
+estimate = 1.53
+ci_low = 1.49
+ci_high = 1.56
+adjusted_for = "age, sex"
+cohort = "UK Biobank (N=325,003, incident CAD)"
+design = "prospective cohort"
+source = "Hindy G, et al. Arterioscler Thromb Vasc Biol. 2020."
+pmid = "32957805"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC7577949/"
+quote = "Within the UK Biobank cohort... hazard ratio per standard deviation increment in the GPSCAD was 1.53 (95% CI 1.49 to 1.56; P = 5 x 10-303)."
+
+[[per_sd]]
+pgs_id = "PGS000013"
+ppm_id = "PPM000926"
+metric = "HR"
+estimate = 1.45
+ci_low = 1.40
+ci_high = 1.49
+adjusted_for = "age, sex"
+cohort = "Malmo Diet and Cancer Study (N=28,556, median follow-up 21.3 years)"
+design = "prospective cohort"
+source = "Hindy G, et al. Arterioscler Thromb Vasc Biol. 2020."
+pmid = "32957805"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC7577949/"
+quote = "Expressed as a continuous variable, hazard ratio per standard deviation increment in GPSCAD was 1.45 (95% CI 1.40 to 1.49; P = 1 x 10-124)."
+
+[[per_sd]]
+pgs_id = "PGS000662"
+ppm_id = "PPM001951"
+metric = "OR"
+estimate = 2.04
+adjusted_for = "age at blood collection, genotyping platform, first 10 PCs"
+cohort = "Mass General Brigham Biobank (N=12,472; 1,554 cases)"
+design = "case-control"
+source = "Plym A, et al. J Natl Cancer Inst. 2021."
+pmid = "33792693"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC9086757/"
+quote = "Odds ratios (ORs) are reported as per 1-SD increase in the PRS, adjusted for age at blood collection, genotyping platform, and the first 10 principal components."
+
+[[per_sd]]
+pgs_id = "PGS000662"
+ppm_id = "PPM022293"
+metric = "HR"
+estimate = 1.45
+ci_low = 1.31
+ci_high = 1.61
+adjusted_for = "age, genetic principal components"
+cohort = "BioVU (Vanderbilt), N=3,110 men, outcome = elevated PSA / clinical work-up"
+design = "prospective cohort"
+source = "Shi M, et al. EBioMedicine. 2023."
+pmid = "37865044"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC10597757/"
+quote = "Multivariable Cox proportional hazards models were adjusted for age and genetic principal components... Association estimates are per standard deviation change in the PGS."
+
+[[per_sd]]
+pgs_id = "PGS000016"
+ppm_id = "PPM000385"
+metric = "OR"
+estimate = 1.277
+ci_low = 1.12
+ci_high = 1.46
+adjusted_for = "age, sex"
+cohort = "Color Genomics clinical cohort (N=10,303; 239 cases, self-reported AF)"
+design = "case-control"
+source = "Homburger JR, et al. Genome Med. 2019."
+pmid = "31771638"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6880438/"
+quote = "GPS AF (OR per standard deviation = 1.28 (1.12-1.46); n = 10,303)"
+
+[[per_sd]]
+pgs_id = "PGS000079"
+ppm_id = "PPM002045"
+metric = "HR"
+estimate = 1.43
+ci_low = 1.36
+ci_high = 1.49
+adjusted_for = "age, sex, genotyping array, 15 PCs, UV-protection use, time outdoors, ease of tanning (heavily adjusted beyond age/sex/PCs)"
+cohort = "UK Biobank (N=392,803; 1,805 incident melanoma cases)"
+design = "prospective cohort"
+source = "Kachuri L, et al. Nat Commun. 2020."
+pmid = "33247094"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC7695829/"
+quote = "Hazard ratios (HR) per one standard deviation (SD) increase in the standardized polygenic risk score (PRS)... For the PRS, HR estimates correspond to 1 SD increase in the standardized genetic score."
+
+[[per_sd]]
+pgs_id = "PGS000079"
+ppm_id = "PPM017167"
+metric = "HR"
+estimate = 1.41
+ci_low = 1.33
+ci_high = 1.49
+adjusted_for = "age, sex, assessment centre, 40 PCs, Townsend Index, education, income, lifestyle index (heavily adjusted beyond age/sex/PCs)"
+cohort = "UK Biobank subset (N=1,200; 121 melanoma cases)"
+design = "prospective cohort"
+source = "Byrne S, et al. Int J Epidemiol. 2023."
+pmid = "36651198"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC10244040/"
+quote = "PRSs and lifestyle index were used as continuous variables, standardized to estimate hazard ratio per SD change... All models were adjusted for age at baseline (continuous); sex (where relevant); assessment centre; socio-economic status (Townsend Index-continuous); education...; household income...; birth location..."
+
+[[per_sd]]
+pgs_id = "PGS004873"
+ppm_id = "PPM021165"
+metric = "HR"
+estimate = 1.87
+ci_low = 1.76
+ci_high = 1.99
+adjusted_for = "PCs 1-10, genotyping batch, assessment center"
+cohort = "UK Biobank (incident RA; N=447,332, 994 cases)"
+design = "prospective cohort"
+source = "Jermy B, et al. Nat Commun. 2024;15:5007."
+pmid = "38866767"
+url = "https://pubmed.ncbi.nlm.nih.gov/38866767/"
+quote = "We first computed HRs per standard deviation within each study. PGS in analyses were standardized to have mean 0 and variance 1 for each study."
+
+[[per_sd]]
+pgs_id = "PGS004873"
+ppm_id = "PPM021171"
+metric = "HR"
+estimate = 1.65
+ci_low = 1.62
+ci_high = 1.69
+adjusted_for = "PCs 1-10, genotyping batch, assessment center"
+cohort = "FinnGen Biobank (incident RA; N=412,090, 9,610 cases)"
+design = "prospective cohort"
+source = "Jermy B, et al. Nat Commun. 2024;15:5007."
+pmid = "38866767"
+url = "https://pubmed.ncbi.nlm.nih.gov/38866767/"
+quote = "We first computed HRs per standard deviation within each study."
+
+[[per_sd]]
+pgs_id = "PGS000043"
+ppm_id = "PPM001939"
+metric = "HR"
+estimate = 1.47
+ci_low = 1.29
+ci_high = 1.68
+adjusted_for = "age, sex, PCs 1-5, obesity (BMI>=30), active smoking, heart failure history, diabetes status (heavier than age/sex/PCs)"
+cohort = "Pooled FOURIER + PEGASUS-TIMI 54 + SAVOR-TIMI 53 trial participants with cardiometabolic disease (N=29,663, 174 VTE events)"
+design = "prospective cohort"
+source = "Marston NA, et al. Circ Genom Precis Med. 2021;14(1):e003006."
+pmid = "33434447"
+url = "https://pubmed.ncbi.nlm.nih.gov/33434447/"
+quote = "In a continuous model adjusted for clinical risk factors, each standard deviation increase in the genetic risk score was associated with a 47% (95% CI, 29-68) increased risk of VTE (P<0.0001)."
+
+[[per_sd]]
+pgs_id = "PGS004883"
+ppm_id = "PPM021243"
+metric = "HR"
+estimate = 1.32
+ci_low = 1.31
+ci_high = 1.34
+adjusted_for = "PCs 1-10, genotyping batch, assessment center"
+cohort = "FinnGen Biobank (incident knee OA; N=412,090, 46,914 cases)"
+design = "prospective cohort"
+source = "Jermy B, et al. Nat Commun. 2024;15:5007."
+pmid = "38866767"
+url = "https://pubmed.ncbi.nlm.nih.gov/38866767/"
+quote = "We first computed HRs per standard deviation within each study."
+
+[[per_sd]]
+pgs_id = "PGS004883"
+ppm_id = "PPM021244"
+metric = "HR"
+estimate = 1.17
+ci_low = 1.16
+ci_high = 1.18
+adjusted_for = "PCs 1-10, genotyping batch, assessment center"
+cohort = "Estonian Biobank (incident knee OA; N=199,868, 38,047 cases)"
+design = "prospective cohort"
+source = "Jermy B, et al. Nat Commun. 2024;15:5007."
+pmid = "38866767"
+url = "https://pubmed.ncbi.nlm.nih.gov/38866767/"
+quote = "We first computed HRs per standard deviation within each study."
+
+[[per_sd]]
+pgs_id = "PGS002237"
+ppm_id = "PPM012723"
+metric = "OR"
+estimate = 1.32
+ci_low = 1.26
+ci_high = 1.38
+adjusted_for = "age, sex, diabetes, PCs of ancestry"
+cohort = "Meta-analysis of 6 African-ancestry cohorts (eMERGE-III, BioMe, HyperGEN, REGARDS, GenHAT, Warfarin; 4,268 cases/10,276 controls), independent testing set"
+design = "case-control"
+source = "Khan A, et al. Nat Med. 2022."
+pmid = "35710995"
+url = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9329233/"
+quote = "In the combined meta-analysis, the GPS had pooled OR per SD of 1.32, 95%CI: 1.26-1.38, P=1.78E-33"
+
+[[per_sd]]
+pgs_id = "PGS002237"
+ppm_id = "PPM012724"
+metric = "OR"
+estimate = 1.42
+ci_low = 1.29
+ci_high = 1.57
+adjusted_for = "age, sex, diabetes, PCs of ancestry"
+cohort = "Meta-analysis of 2 Hispanic/Latinx cohorts (eMERGE-III, BioMe), independent testing set"
+design = "case-control"
+source = "Khan A, et al. Nat Med. 2022."
+pmid = "35710995"
+url = "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9329233/"
+quote = "Latinx (2 cohorts)... OR per SD (95% CI), P-value: 1.42 (1.29-1.57), P=4.56E-12"
+
+[[per_sd]]
+pgs_id = "PGS004606"
+ppm_id = "PPM020767"
+metric = "OR"
+estimate = 1.76
+ci_low = 1.73
+ci_high = 1.78
+adjusted_for = "age, sex, PCs 1-10 (plus smoking, alcohol, BMI, HDL cholesterol, serum albumin in the broader fully adjusted model per source text)"
+cohort = "Million Veteran Program, European-ancestry case-control AMD sample"
+design = "case-control"
+source = "Gorman BR, et al. Nat Genet. 2024 (medRxiv preprint doi: 10.1101/2022.08.16.22278855, numerically identical)."
+pmid = "39623103"
+url = "https://www.medrxiv.org/content/10.1101/2022.08.16.22278855v1.full-text"
+quote = "in our EA sample, a standard deviation increase in the PRS was associated with an AMD OR=1.76 [95% confidence interval (CI) 1.73-1.78] in a fully adjusted model."
+
+# NOT FOUND / SKIPPED (no explicit per-SD statement located in the cited paper's text,
+# or all records trace back only to the score's own development paper without a per-SD
+# sentence applicable to that specific record):
+# - PGS002265 (colorectal cancer): all independent PPMs checked (Guo 2022, Niedermaier 2022,
+#   Yang 2023, Fu 2024) report categorical (tertile/quantile) ORs, not per-SD.
+# - PGS000038 (stroke): Rutten-Jacobs 2018 reports tertile HR only; Abraham 2019's per-SD
+#   phrase grammatically applies to a different score (metaGRS), not the 90-SNP HR=1.13.
+# - PGS002293 (psoriasis): only PPM is from the score's own paper (Shen 2022), reporting a
+#   categorical lifestyle x genetic-risk group HR/OR, not a continuous per-SD estimate.
+# - PGS000014 (type 2 diabetes): candidate rows (Aliyu 2025 Qatar Biobank) rely on a general
+#   per-SD normalization convention applied to 140 scores, but no PGS000014-specific sentence
+#   states its OR/HR is per-SD; omitted per strict-verification rule. Other PPMs (He 2021,
+#   Hao 2022) report categorical (decile/threshold) comparisons, not per-SD.
+# - PGS012541 (asthma): only PPM (Hu et al., Genet Med, in-press) is embargoed in PMC; the
+#   companion medRxiv preprint states covariates (age, sex, PCs) but never states OR is per-SD.
