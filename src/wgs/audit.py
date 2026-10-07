@@ -295,7 +295,7 @@ def check_links(con, m: dict, sample: int = 40, seed: int = 7) -> list[dict]:
     out = []
     for u in picked:
         row = _probe(u)
-        if row["status"] == "broken":  # 5xx and timeouts are often transient: try once more after a pause
+        if row["status"] in ("broken", "unavailable"):  # often transient: try once more after a pause
             time.sleep(5)
             row = _probe(u)
         out.append(row)
@@ -310,9 +310,14 @@ def _probe(u: str) -> dict:
             return {"source": "link", "record": u, "url": u, "status": "ok", "live": f"HTTP {r.status}"}
     except urllib.error.HTTPError as e:
         # Some sites reject scripted clients (403/429) while serving browsers; that is not a dead link.
-        status = "blocked" if e.code in (401, 403, 429) else "broken"
+        # A server error (5xx) means the site is down right now, not that the page is gone.
+        status = "blocked" if e.code in (401, 403, 429) else "unavailable" if e.code >= 500 else "broken"
         return {"source": "link", "record": u, "url": u, "status": status, "live": f"HTTP {e.code}"}
+    except TimeoutError as e:
+        return {"source": "link", "record": u, "url": u, "status": "unavailable", "live": type(e).__name__}
     except Exception as e:  # noqa: BLE001 - network errors of any kind are reported, not raised
+        if isinstance(getattr(e, "reason", None), TimeoutError):
+            return {"source": "link", "record": u, "url": u, "status": "unavailable", "live": "TimeoutError"}
         return {"source": "link", "record": u, "url": u, "status": "broken", "live": type(e).__name__}
 
 
