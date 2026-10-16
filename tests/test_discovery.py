@@ -50,7 +50,7 @@ def test_graceful_degradation(tmp_path):
     cfg = load_config(data=[str(tmp_path)], workspace=str(tmp_path / "ws"))
     rows = {r["id"]: r["status"] for r in evaluate(discover(cfg), cfg)}
     assert rows["traits"] == "partial"  # single-SNP traits only, no polygenic scores
-    assert rows["ancestry"] == "ready"
+    assert rows["ancestry"] == "unavailable"  # needs a VCF (PCA genotypes, chrM, chrY)
     assert rows["health"] == "unavailable"
     assert rows["pgx"] == "unavailable"
 

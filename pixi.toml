@@ -61,10 +61,25 @@ plink2 = ">=2.00a5"
 python = "3.11.*"
 fraposa-pgsc = ">=1.0.2"
 
+# Haplogroups (ADR-020): haplogrep3 for the mother's line (mtDNA, PhyloTree) and Yleaf for the father's line
+# (Y chromosome, YFull tree). Own environment so their Java/pandas pins stay apart.
+[feature.haplo.dependencies]
+python = "3.12.*"
+haplogrep3 = ">=3.2.2,<4"
+samtools = ">=1.21"
+bcftools = ">=1.21"
+pandas = ">=2"
+numpy = ">=1.26"
+
+# Yleaf from its pinned release: the bioconda build leaves out the marker data and trees.
+[feature.haplo.pypi-dependencies]
+yleaf = { git = "https://github.com/genid/Yleaf", tag = "v4.1.5" }
+
 [environments]
 cyrius = { features = ["cyrius"], no-default-feature = true }
 pgs = { features = ["pgs"], no-default-feature = true }
 fraposa = { features = ["fraposa"], no-default-feature = true }
+haplo = { features = ["haplo"], no-default-feature = true }
 
 [tasks]
 wgs = "python -m wgs"

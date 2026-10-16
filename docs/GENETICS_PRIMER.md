@@ -318,6 +318,8 @@ Most medicines are cleared or switched on by a small set of enzymes, mostly in t
 
 - **Admixture / ancestry composition:** the estimated proportions of your genome that best match reference populations (e.g. 1000 Genomes regions). These are *statistical* estimates relative to modern samples, not a history of your family tree.
 - **Haplogroup:** a branch on the mtDNA (maternal) or Y (paternal) family tree, e.g. `H1a` or `R1b-M269`. Each traces a single line back tens of thousands of years.
+- **How this project measures it** (Ancestry tab, ADR-020): you and the 2,504 1000 Genomes people are placed on 10 *principal components*, axes that summarise how DNA varies between people. Your point is written as the closest mix of the five continental group centres. Every reference person is scored the same way with themselves left out, which gives each group a **noise floor**: the share it receives by chance among people who have none of that ancestry. Smaller shares are shown as "not detected". The same leave-one-out test shows which populations inside a group can be told apart (Finnish vs Tuscan easily; British vs Utah-CEPH not at all).
+- **Lineages:** the mother's line is read from mitochondrial DNA with haplogrep3 (PhyloTree), the father's line from the Y chromosome with Yleaf (YFull tree). Each comes with a quality score and a link to the branch on YFull.
 
 ### How this project grades its confidence
 
@@ -457,6 +459,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **N** | An unknown or masked base |
 | **NMD** | Nonsense-mediated decay: the cell destroys messages with an early stop, so no faulty protein is made |
 | **NoCall / RefCall / PASS** | DeepVariant filter labels: undecided / matches reference / confident variant |
+| **Noise floor** | The share an ancestry group gets by chance among reference people who have none of it; smaller shares can't be told apart from zero |
 | **Odds ratio (OR)** | Relative risk measure from case–control studies |
 | **Outside call** | A genotype worked out by a specialist tool (Cyrius, T1K) and handed to PharmCAT instead of being read from the VCF |
 | **Paired-end** | Both ends of each DNA fragment are sequenced |
@@ -472,6 +475,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
 | **Precision / recall / F1** | Benchmark accuracy measures |
 | **Predicted (computer prediction)** | A variant flagged by AI/statistical tools but never classified by a lab; always graded Limited here |
+| **Principal components (PCA)** | A few axes that summarise how DNA differs between people; people with similar ancestry sit close together |
 | **Prodrug (pro-drug)** | A medicine that does nothing until an enzyme converts it into its active form (codeine → morphine, clopidogrel) |
 | **PRS / PGS (Polygenic risk score)** | A score adding up the small effects of many variants into one number, usually shown as a percentile |
 | **Pseudogene** | A broken, near-identical copy of a gene (e.g. *CYP2D7* next to *CYP2D6*) that confuses short-read sequencing |

@@ -57,9 +57,8 @@ MODULES: list[Module] = [
         Enhancer(("cram", "reference"), "check coverage at score positions absent from the VCF"),
         Enhancer(("external:pgsc_calc",), "ingest pgsc_calc results produced elsewhere"),
     ]),
-    Module("ancestry", "Ancestry & haplogroups", GENOTYPES, [
-        Enhancer(("external:haplogrep",), "ingest Haplogrep mtDNA result"),
-        Enhancer(("external:yhaplo",), "ingest yhaplo Y-chromosome result"),
+    Module("ancestry", "Ancestry & haplogroups", VARIANTS, [
+        Enhancer(("cram", "reference"), "read the paternal (Y) lineage from aligned reads instead of the VCF"),
     ]),
     Module("provider", "Comparison with provider reports", ("report",)),
     Module("benchmark", "Accuracy vs Genome in a Bottle", ("truth_vcf",), [

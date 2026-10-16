@@ -101,6 +101,7 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [PGS Catalog](https://www.pgscatalog.org/) | Polygenic scores, their publications and independent evaluations | EMBL-EBI open data; per-score licence recorded |
 | [1000 Genomes reference panel](https://ftp.ebi.ac.uk/pub/databases/spot/pgs/resources/) (PGS Catalog build) | Ancestry-matched percentiles for polygenic scores (≈ 7 GB download) | Open access |
 | [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
+| [IGSR populations](https://www.internationalgenome.org/data-portal/population) | Names and sampling locations of the 26 1000 Genomes populations (Ancestry tab) | Free to use without restriction |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
 
@@ -138,5 +139,9 @@ Each dashboard section declares the inputs it **requires** and the inputs that *
 ### Traits, polygenic scores and Brain & mind
 
 `traits` (seconds) reads featured single-variant traits and rare variants in SFARI genes. `pgs` computes polygenic score percentiles the way the PGS Catalog's pgsc_calc does, with `pgscatalog-utils` and `plink2` from a separate environment (`pixi install -e pgs`, macOS and Linux). It needs the `pgs_catalog` and `pgs_reference` knowledge sources. The first run takes 2–3 hours on a 16 GB laptop (reference QC, score normalising and reference-panel scores are cached afterwards, so re-runs take minutes) and needs about 10 GB of temporary space on the internal disk. Without the `pgs` environment the Traits page still shows the single-variant traits. Design: [ADR-017](docs/DECISIONS.md).
+
+### Ancestry and haplogroups
+
+`ancestry` (under a minute) reuses the polygenic-score step's ancestry PCA to write your DNA as the closest mix of the five 1000 Genomes continental groups and to find your nearest reference population. Both are calibrated by scoring every reference person with themselves left out, so the page shows each group's noise floor and which populations the method can't tell apart. It also reads your maternal lineage (mtDNA, haplogrep3 + PhyloTree) from the VCF and, for XY samples, your paternal lineage (Y chromosome, Yleaf + YFull tree) from the Y reads in the CRAM, or from the VCF when there is no alignment. The haplogroup tools live in their own environment: `pixi install -e haplo` (Yleaf is installed from its pinned GitHub release because the bioconda build leaves out its marker data). Design: [ADR-020](docs/DECISIONS.md).
 
 See [docs/DECISIONS.md](docs/DECISIONS.md) for why things are built this way.

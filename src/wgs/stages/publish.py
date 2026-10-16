@@ -34,7 +34,7 @@ from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, console, write_json
-from . import annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, traits, variants
+from . import ancestry, annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, traits, variants
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -237,6 +237,15 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Polygenic scores: every published evaluation of the selected scores (effect sizes, cohorts, ancestry)"),
     ("pgs_ancestry", "1", lambda c: [pgs.out_ancestry(c)], _file_sql(pgs.out_ancestry),
      "Genetic-ancestry PCA: you projected onto the 1000 Genomes reference panel, with population similarity"),
+    ("ancestry_components", "1", lambda c: [ancestry.out_components(c)], _file_sql(ancestry.out_components),
+     "Ancestry: your share of each 1000 Genomes continental group, with its noise floor and grades"),
+    ("ancestry_populations", "1", lambda c: [ancestry.out_populations(c)], _file_sql(ancestry.out_populations),
+     "Ancestry: populations in your main group, how many of your nearest reference people come from each, "
+     "and how well the method tells them apart"),
+    ("ancestry_pca", "1", lambda c: [ancestry.out_pca(c)], _file_sql(ancestry.out_pca),
+     "Ancestry: you and the 2,504 1000 Genomes reference people on the 10 ancestry principal components"),
+    ("haplogroups", "1", lambda c: [ancestry.out_haplogroups(c)], _file_sql(ancestry.out_haplogroups),
+     "Ancestry: your maternal (mtDNA) and paternal (Y) haplogroups, with quality and the lineage tree used"),
     ("pgs_genotype_qc", "1", lambda c: [pgs.out_genotype_qc(c)], _file_sql(pgs.out_genotype_qc),
      "Polygenic scores: your genotype calls at scored sites vs how common each allele is (a calibration check)"),
 ]
@@ -254,6 +263,7 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "pgx_report": pgx.out_paths(ctx)["report"],
         "traits": traits.out_summary(ctx),
         "pgs": pgs.out_summary(ctx),
+        "ancestry": ancestry.out_summary(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 

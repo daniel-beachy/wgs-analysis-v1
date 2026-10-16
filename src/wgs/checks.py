@@ -171,6 +171,28 @@ CHECKS: list[Check] = [
     Check("pgs.sourced", "Every computed polygenic score links to its paper",
           "Each percentile on the page must lead to the study that built the score.", ("pgs_scores",),
           "SELECT pgs_id FROM pgs_scores WHERE percentile IS NOT NULL AND pmid IS NULL AND doi IS NULL"),
+    Check("ancestry.shares_valid", "Continental shares are between 0 and 1 and add up to 100%",
+          "Shares that do not add up mean the fit or its inputs went wrong.", ("ancestry_components",),
+          """SELECT 'sum ' || round(sum(share), 4) FROM ancestry_components HAVING count(*) > 0
+             AND (abs(sum(share) - 1) > 1e-6 OR min(share) < 0 OR max(share) > 1)"""),
+    Check("ancestry.noise_labelled", "Shares below their noise floor are never presented as found",
+          "Reference people with none of an ancestry still get a small share by chance; a share below that floor "
+          "must be graded Limited and marked not detected (ADR-020).", ("ancestry_components",),
+          """SELECT superpop FROM ancestry_components WHERE (share <= noise_floor AND (detected OR evidence_level <>
+             'Limited')) OR (share > noise_floor AND NOT detected)"""),
+    Check("ancestry.neighbours_counted", "Every nearest reference person is counted once",
+          "The nearest-population vote must account for exactly the 10 neighbours used (ancestry.K_NEIGHBOURS).",
+          ("ancestry_populations",),
+          "SELECT 'sum ' || sum(neighbours) FROM ancestry_populations HAVING count(*) > 0 AND sum(neighbours) <> 10"),
+    Check("haplogroups.sourced", "Every haplogroup names its tool, tree, quality and a link to the tree",
+          "A lineage label is only checkable with the tree it was placed on.", ("haplogroups",),
+          """SELECT line FROM haplogroups WHERE tool IS NULL OR tree IS NULL OR url IS NULL OR quality IS NULL
+             OR quality NOT BETWEEN 0 AND 1 OR call_level IS NULL"""),
+    Check("haplogroups.no_placeholders", "Haplogroup mutation lists contain only mutations",
+          "An empty haplogrep field was once read as the text 'nan' and counted as a missing mutation.",
+          ("haplogroups",),
+          """SELECT line FROM haplogroups WHERE regexp_matches(coalesce(found, '') || coalesce(missing, '')
+             || coalesce(extra, ''), '"(nan|none|null)"', 'i')"""),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

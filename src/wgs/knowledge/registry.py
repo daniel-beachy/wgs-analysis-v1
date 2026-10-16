@@ -1,5 +1,6 @@
 """All knowledge sources, in refresh order."""
 
+from .ancestry import IgsrPopulations
 from .clingen import ClinGen
 from .clinvar import ClinVar
 from .curated import HPO, AcmgSF, Mondo, Orphanet
@@ -15,4 +16,4 @@ from .predictors import AlphaMissense, GeneConstraint, Revel
 SOURCES = [Ensembl(), Mane(), ClinVar(), ClinGen(), ThousandGenomes(), GnomAD(), HPO(), Mondo(), Orphanet(), AcmgSF(),
            GeneConstraint(), AlphaMissense(), Revel(),
            PharmCAT(), ImgtHla(), MedlinePlus(), NcbiGene(),
-           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari()]
+           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari(), IgsrPopulations()]

@@ -86,6 +86,10 @@ SELECT * FROM doc_changes;
 | `pgs_evaluations` | one published evaluation of a scored PGS | effect sizes (OR/HR/AUROC/…), sample, ancestry, whether independent |
 | `pgs_ancestry` | one person (you = `self`, plus 1000 Genomes) | PCs and most-similar population used for percentiles |
 | `pgs_genotype_qc` | one variant type × panel-frequency band | how often your genotype says "no variant" where the 1000 Genomes panel says the variant is common — a calibration check on the target genotypes |
+| `ancestry_components` | one 1000 Genomes continental group | `share` of your DNA, `noise_floor` (share reference people with none of it get by chance; below it = `detected` false), grades |
+| `ancestry_populations` | one population in your main continental group | `neighbours` (of your 10 nearest reference people), `loo_recall` (how often the method places that population's own people back in it), `confused_with`, `in_nearest_group`, IGSR `description`/`url` |
+| `ancestry_pca` | one person (you = `you` true, plus 2,504 1000 Genomes people) | PCs 1–10 with super-population and population labels |
+| `haplogroups` | one lineage (`maternal` mtDNA / `paternal` Y) | `haplogroup`, `quality`, `call_level`, `tool`, `tree`, `path` (Y lineage, JSON), `found`/`missing` mutations, `url` (YFull branch) |
 | `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
@@ -107,6 +111,8 @@ Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 - `alt_is_major`: the "variant" is actually the common allele (the reference genome carries the rarer one).
 - `sensitive`: the topic needs consent before discussion (see §5).
 - `sources`: JSON list of `{source, version, record, url}` — cite these.
+
+Ancestry is similarity to present-day reference people, not a family history: quote shares with their noise floor, say when the nearest population is a group the method can't separate (`doc_ancestry.nearest.group`), and remember a haplogroup is one line of ancestors out of thousands.
 
 The release also has a `checks` document (`checks.json`): automatic self-checks. If any failed, say so before relying on the rows they name.
 
