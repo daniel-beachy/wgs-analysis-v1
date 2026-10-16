@@ -234,6 +234,28 @@ CHECKS: list[Check] = [
           """SELECT e.event_id FROM cnv_events e WHERE e.status IN ('possible_exon_deletion',
              'possible_exon_duplication') AND NOT EXISTS (SELECT 1 FROM claims c
              WHERE c.claim_id = 'special:cnv:' || e.event_id)"""),
+    Check("recount.covered", "Every finding at a position was re-counted from the raw reads",
+          "The read re-count (ADR-022) is the independent check on each genotype; a finding it skipped would keep "
+          "a grade nothing re-examined.", ("claims", "recount"),
+          "SELECT claim_id FROM claims WHERE chrom IS NOT NULL AND chrom <> 'MT' AND recount_status IS NULL"),
+    Check("recount.lowers_call", "Findings the raw reads don't back up never keep a High call",
+          "Where re-counting disagrees the call must be Low; where it is weak or unclear, at most Medium.",
+          ("claims", "recount"),
+          """SELECT claim_id FROM claims
+             WHERE (recount_status = 'disagrees' AND call_level NOT IN ('Low', 'Not callable'))
+                OR (recount_status IN ('weak', 'unclear') AND call_level = 'High')
+                OR (recount LIKE '%look_alike%' AND call_level = 'High')"""),
+    Check("recount.pgx_genes", "Every medicine gene typed from the VCF was re-counted at its defining positions",
+          "PharmCAT's result rests on those positions; one the reads contradict must lower the gene's call.",
+          ("pgx_genes", "recount"),
+          """SELECT gene FROM pgx_genes WHERE call_source LIKE 'PharmCAT%' AND (recount IS NULL
+             OR (json_extract_string(recount, '$.status') = 'disagrees'
+                 AND call_level NOT IN ('Low', 'Not callable')))"""),
+    Check("recount.mostly_agrees", "The re-count agrees with almost every call",
+          "A good 30x genome's calls match their reads well over 95% of the time; far less points to a counting bug "
+          "(soft-clipped reads once made a real 32-letter insertion look absent).", ("recount",),
+          """SELECT round(100 * avg((status = 'confirmed')::INT), 1) || '% confirmed' FROM recount
+             WHERE expected IS NOT NULL HAVING count(*) >= 50 AND avg((status = 'confirmed')::INT) < 0.95"""),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

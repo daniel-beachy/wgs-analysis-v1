@@ -12,6 +12,7 @@ from . import (
                publish,
                qc,
                reads,
+               recount,
                reference,
                special,
                traits,
@@ -35,5 +36,6 @@ STAGES = [
     pgs.STAGE,
     ancestry.STAGE,
     special.STAGE,
+    recount.STAGE,
     publish.STAGE,
 ]

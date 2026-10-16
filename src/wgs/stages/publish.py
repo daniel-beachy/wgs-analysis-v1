@@ -34,7 +34,21 @@ from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, console, write_json
-from . import ancestry, annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, special, traits, variants
+from . import (
+    ancestry,
+    annotate,
+    coverage,
+    genotypes,
+    pgs,
+    pgx,
+    qc,
+    reads,
+    recount,
+    reference,
+    special,
+    traits,
+    variants,
+)
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -109,9 +123,18 @@ def _annotations_sql(ctx: Context) -> str:
 
 
 def _claims_in(ctx: Context) -> list[Path]:
-    paths = [p for p in (annotate.claims_path(ctx), pgx.out_paths(ctx)["claims"], special.out_claims(ctx))
-             if p.exists()]
-    return paths
+    """The re-counted claims (ADR-022) when they are newer than every stage's own claims, else the originals."""
+    sources = recount.claim_sources(ctx)
+    return [recount.out_claims(ctx)] if recount.fresh(ctx, recount.out_claims(ctx), sources) else sources
+
+
+def _pgx_genes_in(ctx: Context) -> list[Path]:
+    src = pgx.out_paths(ctx)["genes"]
+    return [recount.out_pgx_genes(ctx)] if recount.fresh(ctx, recount.out_pgx_genes(ctx), [src]) else [src]
+
+
+def _pgx_genes_sql(ctx: Context) -> str:
+    return f"SELECT * FROM '{_pgx_genes_in(ctx)[0]}'"
 
 
 def _claims_sql(ctx: Context) -> str:
@@ -220,7 +243,7 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
     ("genes", "1", _genes_in, _genes_sql, "Ensembl gene coordinates (GRCh37) for searching by gene name"),
     ("gene_about", "1", _gene_about_in, _gene_about_sql,
      "What each gene does, in words: MedlinePlus Genetics plain-language summary, else the NCBI RefSeq summary"),
-    ("pgx_genes", "1", lambda c: [pgx.out_paths(c)["genes"]], _pgx_sql("genes"),
+    ("pgx_genes", "1", _pgx_genes_in, _pgx_genes_sql,
      "Medicines: your diplotype, phenotype and call confidence for each pharmacogene (PharmCAT + outside callers)"),
     ("pgx_drugs", "1", lambda c: [pgx.out_paths(c)["drugs"]], _pgx_sql("drugs"),
      "Medicines: every drug guideline/label PharmCAT matched against your genotypes (CPIC, DPWG, FDA)"),
@@ -259,6 +282,9 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Ancestry: you and the 2,504 1000 Genomes reference people on the 10 ancestry principal components"),
     ("haplogroups", "1", lambda c: [ancestry.out_haplogroups(c)], _file_sql(ancestry.out_haplogroups),
      "Ancestry: your maternal (mtDNA) and paternal (Y) haplogroups, with quality and the lineage tree used"),
+    ("recount", "1", lambda c: [recount.out_sites(c)], _file_sql(recount.out_sites),
+     "Read re-count: at every position a finding rests on, how many raw reads show each version, the genotype "
+     "they fit, and whether it matches the call"),
     ("pgs_genotype_qc", "1", lambda c: [pgs.out_genotype_qc(c)], _file_sql(pgs.out_genotype_qc),
      "Polygenic scores: your genotype calls at scored sites vs how common each allele is (a calibration check)"),
 ]
@@ -279,6 +305,7 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "ancestry": ancestry.out_summary(ctx),
         "special": special.out_summary(ctx),
         "genome_stats": special.out_stats(ctx),
+        "recount": recount.out_summary(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 

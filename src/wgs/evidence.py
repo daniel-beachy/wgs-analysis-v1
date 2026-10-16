@@ -148,6 +148,82 @@ def call_confidence(*, filter: str | None, gq: int | None, dp: int | None, vaf: 
     return level, reasons
 
 
+COPIES_WORD = {0: "no copies", 1: "one copy", 2: "two copies"}
+
+
+def _cap(level: str, cap: str) -> str:
+    if level not in CALL[1:]:
+        return level
+    return CALL[min(CALL.index(level), CALL.index(cap))]
+
+
+def _shown(rc: dict) -> str:
+    ref, alt = rc.get("ref") or "", rc.get("alt") or ""
+    if len(ref) == len(alt):
+        return alt
+    return "the deletion" if len(ref) > len(alt) else "the insertion"
+
+
+def recount_call(level: str, reasons: list[str], rc: dict | None) -> tuple[str, list[str]]:
+    """Call confidence after re-counting the raw reads (ADR-022). Lowers, never raises.
+
+    `rc` is a site verdict (stages/recount.py: status, read counts, expected/observed copies, flags) or a gene
+    verdict (kind "gene": status over all its defining positions)."""
+    if not rc:
+        return level, reasons
+    reasons = list(reasons)
+    st = rc.get("status")
+    if rc.get("kind") == "gene":
+        n, probs = rc.get("positions", 0), ", ".join(rc.get("problems") or [])
+        if st == "confirmed":
+            reasons.append(f"Re-counted from the raw reads: all {n} positions that define this result match the call")
+        elif st == "weak":
+            level = _cap(level, "Medium")
+            reasons.append(f"Re-counted from the raw reads: too few reads to confirm {probs} on their own")
+        elif st == "unclear":
+            level = _cap(level, "Medium")
+            reasons.append(f"Re-counting the raw reads gives no clear answer at {probs}")
+        elif st == "disagrees":
+            level = _cap(level, "Low")
+            reasons.append(f"Re-counting the raw reads disagrees with the call at {probs}, so this result may be wrong")
+        for u in rc.get("uncalled") or []:
+            if u.get("clear"):
+                copies = COPIES_WORD.get(u["observed"], "?")
+                reasons.append(f"At {u['where']} ({u['why']}) the raw reads suggest {copies}: "
+                               f"{u['alt_reads']} of {u['reads']} reads show {u['alt']}. Noted only; it doesn't change "
+                               "the result")
+            else:
+                reasons.append(f"At {u['where']} ({u['why']}) too few reads ({u['reads']}) to tell from a re-count")
+        return level, reasons
+    shown, n = _shown(rc), (rc.get("ref_reads") or 0) + (rc.get("alt_reads") or 0)
+    counts = f"{rc.get('alt_reads', 0)} of {n} reads show {shown}"
+    exp, obs = COPIES_WORD.get(rc.get("expected"), "?"), COPIES_WORD.get(rc.get("observed"), "?")
+    if st == "confirmed":
+        reasons.append(f"Re-counted from the raw reads: {counts}, which fits {exp}, the same as the call")
+    elif st == "weak":
+        level = _cap(level, "Medium")
+        reasons.append(f"Re-counted from the raw reads: {counts}; that leans towards {exp} but is too few reads to "
+                       "confirm it independently")
+    elif st == "unclear":
+        level = _cap(level, "Medium")
+        reasons.append(f"Re-counted from the raw reads: {counts}, which doesn't clearly fit {exp} (the call) or {obs}")
+    elif st == "disagrees":
+        level = _cap(level, "Low")
+        reasons.append(f"Re-counting the raw reads disagrees: {counts}, which fits {obs}, not {exp} as called")
+    elif st == "not_checkable" and rc.get("note"):
+        reasons.append(f"Could not be re-counted from the raw reads: {rc['note']}")
+    flags = rc.get("flags") or []
+    if "look_alike" in flags:
+        level = _cap(level, "Medium")
+        reasons.append(f"{rc.get('low_mapq_reads')} reads here could equally belong to a look-alike stretch of DNA "
+                       "elsewhere, so some reads may come from the wrong place")
+    if "one_strand" in flags:
+        level = _cap(level, "Medium")
+        reasons.append(f"The reads showing {shown} come mostly from one reading direction (strand bias), a known sign "
+                       "of sequencing error")
+    return level, reasons
+
+
 def overall(evidence: str, call: str) -> str:
     """The weaker of the two grades, on the shared Strong / Moderate / Limited / Not callable scale."""
     if call == "Not callable":
