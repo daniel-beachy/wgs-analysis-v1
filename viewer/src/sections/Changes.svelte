@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getReveal, setReveal } from '../lib/reveal';
   // "What changed": each release stores a diff against the one before it (src/wgs/diff.py).
   // This shows why your results moved: a knowledge source updated, the evidence model changed, or your data did.
   import type { Index, Manifest, ReleaseEntry } from '../lib/data';
@@ -15,7 +16,7 @@
   const releases = $derived(index.releases.filter((r) => r.sample === m.sample));
   let pickedId = $state('');
   const picked = $derived(releases.find((r) => r.id === (pickedId || m.id)) ?? releases[0]);
-  let revealed = $state(sessionStorage.getItem('reveal-sensitive') === '1');
+  let revealed = $state(getReveal());
 
   const load = $derived(picked ? loadManifest(picked).then(async (mm) => ({ mm, ch: await loadDoc<any>(mm, 'changes'), k: await loadDoc<any>(mm, 'knowledge') })) : Promise.resolve(null));
 
@@ -102,7 +103,7 @@
         {#if ch.claims.added.length || ch.claims.removed.length || ch.claims.changed.length}
           <Card title="Your findings" subtitle="Graded claims that were added, removed or regraded. Wording-only updates (new condition names, updated submission counts) are folded away below.">
             {#if [...ch.claims.added, ...ch.claims.removed, ...ch.claims.changed].some((r: any) => r.sensitive)}
-              <p class="small sens">🔒 Some changes involve sensitive findings and are masked. <button onclick={() => { revealed = !revealed; sessionStorage.setItem('reveal-sensitive', revealed ? '1' : '0'); }}>{revealed ? 'Hide' : 'Reveal'}</button></p>
+              <p class="small sens">🔒 Some changes involve sensitive findings and are masked. <button onclick={() => { revealed = !revealed; setReveal(revealed); }}>{revealed ? 'Hide' : 'Reveal'}</button></p>
             {/if}
             <table class="small">
               <thead><tr><th></th><th>Finding</th><th>Section</th><th>What changed</th><th>Now</th></tr></thead>

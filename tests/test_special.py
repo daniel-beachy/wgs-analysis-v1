@@ -139,3 +139,11 @@ def test_cnv_classification():
     assert special.classify_cnv({**base, "exons": [], "delly": True, "depth_support": False})[0] == "no_exon"
     many = {**base, "exons": [f"G exon {i}" for i in range(6)], "delly": False, "depth_support": True}
     assert special.classify_cnv(many)[0] == "long_depth_signal"
+
+
+def test_adult_onset_uses_typical_onset():
+    # Huntington's: rare juvenile cases (earliest onset 2) but typically 30+; must count as adult-onset.
+    assert special.adult_onset({"typ_age_onset_min": 30, "age_onset_min": 2})
+    assert not special.adult_onset({"typ_age_onset_min": 1, "age_onset_min": 0})
+    assert special.adult_onset({"typ_age_onset_min": None, "age_onset_min": 40})
+    assert not special.adult_onset({})

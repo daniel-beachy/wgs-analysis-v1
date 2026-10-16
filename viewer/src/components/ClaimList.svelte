@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getReveal, setReveal } from '../lib/reveal';
   // Graded claims for one dashboard section, each showing what is claimed, how strong the evidence is,
   // how confident your genotype call is, and the sources behind it. Sensitive findings stay hidden until revealed.
   import type { Manifest } from '../lib/data';
@@ -16,7 +17,7 @@
   let cat = $state('');
   let level = $state('');
   let open = $state<string | null>(null);
-  let revealAll = $state(sessionStorage.getItem('reveal-sensitive') === '1');
+  let revealAll = $state(getReveal());
   let revealed = $state<Set<string>>(new Set());
 
   const RANK = "CASE overall WHEN 'Strong' THEN 0 WHEN 'Moderate' THEN 1 WHEN 'Limited' THEN 2 ELSE 3 END";
@@ -42,7 +43,7 @@
   const nSensitive = $derived(rows.filter((r) => r.sensitive).length);
   const hidden = (r: Row) => r.sensitive && !revealAll && !revealed.has(r.claim_id);
   function reveal(r: Row) { revealed = new Set([...revealed, r.claim_id]); }
-  function toggleAll() { revealAll = !revealAll; sessionStorage.setItem('reveal-sensitive', revealAll ? '1' : '0'); }
+  function toggleAll() { revealAll = !revealAll; setReveal(revealAll); }
   const json = (s: string | null | undefined, d: any = []) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
   let allLabs = $state(false);
   let showAll = $state(false);

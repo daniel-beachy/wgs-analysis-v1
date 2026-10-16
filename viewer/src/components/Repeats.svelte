@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getReveal, setReveal } from '../lib/reveal';
   // Repeat expansions at every STRchive disease locus (ADR-021): your repeat size next to the typical and
   // disease-causing ranges. Adult-onset conditions stay hidden until revealed, like other sensitive findings.
   import type { Manifest } from '../lib/data';
@@ -9,7 +10,7 @@
   let rows = $state<Row[]>([]);
   let loaded = $state(false);
   let showAll = $state(false);
-  let revealAll = $state(sessionStorage.getItem('reveal-sensitive') === '1');
+  let revealAll = $state(getReveal());
 
   $effect(() => {
     (async () => {
@@ -30,7 +31,7 @@
   const flagged = $derived(rows.filter((r) => r.status === 'intermediate' || r.status === 'disease_range'));
   const shown = $derived(showAll ? rows : rows.filter((r) => r.status !== 'typical' || r.call_level !== 'High'));
   const nSensitive = $derived(rows.filter((r) => r.sensitive).length);
-  function toggle() { revealAll = !revealAll; sessionStorage.setItem('reveal-sensitive', revealAll ? '1' : '0'); }
+  function toggle() { revealAll = !revealAll; setReveal(revealAll); }
   const range = (r: Row) => [r.benign_max != null ? `typical ≤ ${r.benign_max}` : '', r.pathogenic_min != null ? `disease ≥ ${r.pathogenic_min}` : ''].filter(Boolean).join(' · ') || 'no published ranges';
 </script>
 

@@ -46,7 +46,7 @@ CITE = {
 }
 STRCHIVE_EVIDENCE = {"Definitive": "Strong", "Strong": "Strong", "Moderate": "Moderate", "Limited": "Limited",
                      "Provisional": "Limited"}
-ADULT_ONSET = 18  # STRchive age_onset_min at or above this → adult-onset → click-to-reveal (AGENTS.md §5.9)
+ADULT_ONSET = 18  # typical onset at or above this age → adult-onset → click-to-reveal (AGENTS.md §5.9)
 HLA_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "hla_associations.toml"
 BLOOD_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "blood_group.toml"
 ACMG_LIST = Path(__file__).parents[1] / "knowledge" / "data" / "acmg_sf_v3.3.csv"
@@ -255,6 +255,15 @@ def _gba(ctx: Context, d: Path) -> dict | None:
 # ---------------------------------------------------------------------------------------------------------------
 
 
+def adult_onset(t: dict) -> bool:
+    """Adult-onset by *typical* onset age (STRchive typ_age_onset_min), falling back to the earliest reported age.
+    Huntington's disease has rare juvenile cases, so its earliest onset is under 18 while it typically starts at
+    30–50; the earliest age alone missed it."""
+    age = t.get("typ_age_onset_min")
+    age = t.get("age_onset_min") if age is None else age
+    return age is not None and age >= ADULT_ONSET
+
+
 def pure_run(seq: str, motif: str) -> int:
     """Longest uninterrupted run of `motif` (IUPAC codes allowed) in `seq`, in any frame."""
     pat = re.compile("".join(IUPAC.get(c, c) for c in motif.upper()))
@@ -369,7 +378,7 @@ def repeat_rows(eh: dict, loci: dict[str, dict], fasta: Path, indels=lambda regi
             "strchive_evidence": ",".join(t.get("evidence") or []),
             "call_level": call,
             "overall": ev.overall("Limited" if disputed else ev_level, call),
-            "coverage": res.get("Coverage"), "sensitive": (t.get("age_onset_min") or 0) >= ADULT_ONSET,
+            "coverage": res.get("Coverage"), "sensitive": adult_onset(t),
             "age_onset": t.get("age_onset"), "url": t.get("url"), "pmids": list(t.get("pmids") or []),
         })
     return rows
@@ -395,7 +404,7 @@ def _repeats(ctx: Context, d: Path, st: Store) -> list[dict] | None:
                 r[k] = None
         for k in ("evidence", "inheritance", "pathogenic_motif_reference_orientation", "pmids"):
             r[k] = list(r.get(k) if r.get(k) is not None else [])
-        for k in ("benign_max", "intermediate_min", "pathogenic_min", "age_onset_min"):
+        for k in ("benign_max", "intermediate_min", "pathogenic_min", "age_onset_min", "typ_age_onset_min"):
             r[k] = None if r.get(k) is None or r[k] != r[k] else int(r[k])
     vp = variants.variants_parquet(ctx)
     con = duckdb.connect()
