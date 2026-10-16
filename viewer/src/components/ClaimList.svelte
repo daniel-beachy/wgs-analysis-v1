@@ -5,7 +5,7 @@
   import type { Manifest } from '../lib/data';
   import { query, useRelease, sqlString, type Row } from '../lib/db';
   import { go } from '../lib/router.svelte';
-  import { OVERALL_PILL, CALL_PILL, CLASS_PILL, CLASS_LABEL, stars, STAR_WORD, pct, parseSources, consequenceLabel, aaShort, ROLE, INH } from '../lib/evidence';
+  import { OVERALL_PILL, CALL_PILL, RECOUNT, CLASS_PILL, CLASS_LABEL, stars, STAR_WORD, pct, parseSources, consequenceLabel, aaShort, ROLE, INH } from '../lib/evidence';
   import Term from './Term.svelte';
 
   let { m, section, intro = '', groups = [], empty = 'No graded findings for this section in this release.', filters = true, limit = 0, onrows }:
@@ -93,7 +93,7 @@
                 {#if r.role && ROLE[r.role] && r.section !== 'pgx' && r.section !== 'traits'}<span class="pill {ROLE[r.role][1]}" title={r.role_reason ?? ''}>{ROLE[r.role][0]}</span>{/if}
                 {#if r.alt_is_major}<span class="pill" title="The reference genome carries the rarer allele here; the listed 'variant' is what most people have. See Reference genome in the primer.">majority allele</span>{/if}</td>
               <td><span class="pill {OVERALL_PILL[r.evidence_level]}">{r.evidence_level}</span></td>
-              <td><span class="pill {CALL_PILL[r.call_level]}">{r.call_level}</span></td>
+              <td><span class="pill {CALL_PILL[r.call_level]}">{r.call_level}</span>{#if r.recount_status && RECOUNT[r.recount_status]}<span class="rc {RECOUNT[r.recount_status].pill}" title={RECOUNT[r.recount_status].title}>{RECOUNT[r.recount_status].icon} reads</span>{/if}</td>
               <td><span class="pill {OVERALL_PILL[r.overall]}">{r.overall}</span></td>
             </tr>
             {#if open === r.claim_id}
@@ -209,5 +209,9 @@
   .labs summary { cursor: pointer; color: var(--accent); }
   .labs table { margin-top: 6px; }
   .labs td { vertical-align: top; }
+  .rc { display: block; margin-top: 3px; font-size: 0.72rem; white-space: nowrap; color: var(--muted); }
+  .rc.pass { color: var(--good); }
+  .rc.warn, .rc.partial { color: var(--warn); }
+  .rc.fail { color: var(--bad); }
   .pill.acmg { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 </style>

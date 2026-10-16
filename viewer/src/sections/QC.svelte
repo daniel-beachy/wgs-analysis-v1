@@ -10,6 +10,7 @@
   import Bars from '../components/Bars.svelte';
   import Line from '../components/Line.svelte';
   import GenomeDepth from '../components/GenomeDepth.svelte';
+  import { RECOUNT } from '../lib/evidence';
 
   let { m }: { m: Manifest } = $props();
 
@@ -52,6 +53,21 @@
     useRelease(m).then(() => query("SELECT * FROM pgs_genotype_qc ORDER BY kind = 'indel', band"))
       .then((r) => (calib = r.rows as any));
   });
+
+  // Read re-count (ADR-022): every position a finding or a medicine result rests on, counted again from the CRAM.
+  let rc = $state<any[]>([]);
+  $effect(() => {
+    if (!m.tables.recount) return;
+    useRelease(m).then(() => query('SELECT * FROM recount')).then((r) => (rc = r.rows as any));
+  });
+  const RC_ORDER = ['confirmed', 'weak', 'unclear', 'disagrees', 'not_called', 'not_checkable'];
+  const RC_SOURCE: Record<string, string> = { claim: 'Behind your findings', pgx: 'Defining your medicine results' };
+  const RC_FLAG: Record<string, string> = { look_alike: 'many reads could belong to look-alike DNA elsewhere', one_strand: 'variant reads come from one reading direction only' };
+  const copiesWord = (n: number | null | undefined) => (n == null ? '—' : ['no copies', 'one copy', 'two copies'][n] ?? `${n} copies`);
+  const shortAllele = (a: string) => (a.length > 6 ? `${a.slice(0, 4)}…(${a.length})` : a);
+  const RC_PRIORITY = ['disagrees', 'unclear', 'weak', 'not_called', 'not_checkable', 'confirmed'];
+  const rcExceptions = $derived(rc.filter((r) => r.status !== 'confirmed' || (r.flags ?? []).length)
+    .sort((a, b) => RC_PRIORITY.indexOf(a.status) - RC_PRIORITY.indexOf(b.status)));
 
   const fmtBp = (v: number) => `${(v / 1e6).toFixed(0)} Mb`;
   const subColor = (s: string) => (['A>G', 'G>A', 'C>T', 'T>C'].includes(s) ? 'var(--accent)' : 'var(--accent-2)');
@@ -200,6 +216,50 @@
         </Card>
       </div>
 
+      {#if rc.length}
+        {@const judged = rc.filter((r) => r.expected != null)}
+        {@const ok = judged.filter((r) => r.status === 'confirmed').length}
+        <Card title="Re-counted from the raw reads" subtitle="At every position a finding rests on, each read in your CRAM was counted again, separately from the variant caller.">
+          <div class="row"><span class="kpi">{int(ok)} of {int(judged.length)}</span><span class="muted">re-counted genotypes match the call</span></div>
+          {@const sources = Object.entries(RC_SOURCE).filter(([src]) => rc.some((r) => r.source === src))}
+          <div class="tablewrap"><table class="small rc-table">
+            <thead><tr><th>Verdict</th>{#each sources as [, label]}<th class="num">{label}</th>{/each}</tr></thead>
+            <tbody>
+              {#each RC_ORDER as st}
+                {#if rc.some((r) => r.status === st)}
+                  <tr><td><span class="pill {RECOUNT[st].pill}" title={RECOUNT[st].title}>{RECOUNT[st].word}</span></td>
+                    {#each sources as [src]}{@const n = rc.filter((r) => r.source === src && r.status === st).length}<td class="num" class:faint={!n}>{int(n)}</td>{/each}</tr>
+                {/if}
+              {/each}
+            </tbody>
+          </table></div>
+          {#if rcExceptions.length}
+            <h4>Where the re-count adds something</h4>
+            <div class="tablewrap"><table class="small rc-table rc-stack">
+              <thead><tr><th>Gene / position</th><th>Change</th><th class="num">Reads: usual / variant</th><th>Call says</th><th>Reads say</th><th>Verdict</th></tr></thead>
+              <tbody>
+                {#each rcExceptions as r (r.key)}
+                  <tr>
+                    <td><strong>{r.gene ?? '—'}</strong><div class="mono faint">{r.rsid ?? `${r.chrom}:${r.pos}`}</div></td>
+                    <td class="mono" data-label="Change">{shortAllele(r.ref)}→{shortAllele(r.alt)}</td>
+                    <td class="num" data-label="Reads: usual / variant">{r.ref_reads} / {r.alt_reads}{#if r.low_mapq_reads}<div class="faint">+{r.low_mapq_reads} placed uncertainly</div>{/if}</td>
+                    <td data-label="Call says">{copiesWord(r.expected)}</td>
+                    <td data-label="Reads say">{copiesWord(r.observed)}{#if r.observed != null && r.clear === false}<div class="faint">too few reads to be sure</div>{/if}</td>
+                    <td data-label="Verdict"><span class="pill {RECOUNT[r.status]?.pill}" title={RECOUNT[r.status]?.title}>{RECOUNT[r.status]?.word}</span>
+                      {#each r.flags ?? [] as f}<div class="faint">{RC_FLAG[f] ?? f}</div>{/each}
+                      {#if r.note}<div class="faint">{r.note}</div>{/if}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table></div>
+          {/if}
+          <Explain learn="How this project grades its confidence">
+            <p>Your variant file was made by tellmeGen’s variant caller (DeepVariant) from these same reads. Counting them again with a simple, open method checks that the caller read them correctly. Single-letter changes are read straight off each read. For insertions and deletions, each whole read is laid against both versions of the DNA there and counted for the one it fits better, which also catches reads the aligner partly set aside (<Term t="Soft clip" label="soft clips" />). A binomial model (<a href="https://pubmed.ncbi.nlm.nih.gov/21903627/" target="_blank" rel="noreferrer">Li 2011</a>) then asks whether the counts fit 0, 1 or 2 copies, and needs that answer to be at least 100 times likelier than the next, with at least 8 usable reads.</p>
+            <p>If the reads fit a different genotype, the finding’s call drops to Low. If they are too few or unclear, or many could belong to a look-alike stretch of DNA elsewhere (low <Term t="MAPQ" />), the call is capped at Medium. A re-count never raises a grade. Positions the variant file left uncalled are shown here for information only. What this can’t catch is an error in the reads themselves; the Genome in a Bottle benchmark measures that.</p>
+          </Explain>
+        </Card>
+      {/if}
+
       <div class="grid cols-2">
         {#if fq}
           <Card title="Raw read quality (FASTQ)" subtitle={`Sampled ${int(fq.sampled_reads_per_file)} reads from each file.`}>
@@ -229,7 +289,7 @@
 
       {#if calib.length}
         <Card title="Genotype calibration" subtitle="Your genotypes at the ~millions of positions used for polygenic scores, against how common each variant is in 1000 Genomes.">
-          <table class="small">
+          <div class="tablewrap"><table class="small">
             <thead><tr><th>type</th><th>variant in panel</th><th class="num">sites</th><th class="num">you: none</th><th class="num">one copy</th><th class="num">two copies</th><th class="num">not callable</th><th class="num">your frequency</th><th class="num">panel</th></tr></thead>
             <tbody>
               {#each calib as r}
@@ -240,7 +300,7 @@
                 </tr>
               {/each}
             </tbody>
-          </table>
+          </table></div>
           <Explain>
             <p>A single person’s genotypes should roughly follow population frequencies: where more than 99% of people carry a variant, you should almost never be called as not carrying it. A high “you: none” share in that last band would mean genotypes are being read wrongly — this once caught an indel bug, and the self-check <em>Genotype calibration</em> now guards it on every run.</p>
             <p>“Not callable” positions (common for insertions/deletions described differently by different tools) are left out of your score and filled with the population average, as the PGS Catalog’s own pipeline does.</p>
@@ -308,7 +368,7 @@
 
       {#if inv}
         <Card title="Input files found" subtitle="The pipeline finds files by content, not by name or folder; sections adapt to whatever is present.">
-          <table class="small">
+          <div class="tablewrap"><table class="small files">
             <thead><tr><th>kind</th><th>file</th><th class="num">size</th></tr></thead>
             <tbody>
               {#each inv.files.filter((f: any) => f.kind !== 'report') as f}
@@ -316,7 +376,7 @@
               {/each}
               <tr><td><span class="pill">report</span></td><td class="muted">{inv.files.filter((f: any) => f.kind === 'report').length} provider PDF/zip reports</td><td></td></tr>
             </tbody>
-          </table>
+          </table></div>
         </Card>
       {/if}
     </div>
@@ -339,4 +399,17 @@
   h4 { font-size: 0.9rem; margin: 6px 0; color: var(--muted); font-weight: 600; }
   td.num { white-space: nowrap; }
   tr.alarm td { color: var(--warn); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+  .files td.mono { overflow-wrap: anywhere; }
+  .rc-table th.num { white-space: normal; }
+  .rc-table .pill { white-space: nowrap; }
+  .rc-table td:last-child { white-space: normal; min-width: 14ch; }
+  @media (max-width: 700px) {
+    .rc-stack thead { display: none; }
+    .rc-stack, .rc-stack tbody, .rc-stack tr, .rc-stack td { display: block; }
+    .rc-stack td { border: 0; padding: 2px 6px; white-space: normal; text-align: left; }
+    .rc-stack td[data-label]::before { content: attr(data-label) ': '; color: var(--faint); }
+    .rc-stack td .faint, .rc-stack td .pill { display: inline; margin-left: 4px; }
+    .rc-stack tr { border-bottom: 1px solid var(--border); padding: 6px 0; }
+  }
 </style>

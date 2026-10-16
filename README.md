@@ -148,6 +148,8 @@ Each dashboard section declares the inputs it **requires** and the inputs that *
 
 ### Ancestry and haplogroups
 
+`recount` (under a minute) goes back to the raw reads in the CRAM at every position a finding or a medicine result rests on and counts which version each read shows, separately from the variant caller. Where the reads fit a different genotype the finding's call drops to Low; weak, unclear or look-alike-region support caps it at Medium. Design: [ADR-022](docs/DECISIONS.md).
+
 `ancestry` (under a minute) reuses the polygenic-score step's ancestry PCA to write your DNA as the closest mix of the five 1000 Genomes continental groups and to find your nearest reference population. Both are calibrated by scoring every reference person with themselves left out, so the page shows each group's noise floor and which populations the method can't tell apart. It also reads your maternal lineage (mtDNA, haplogrep3 + PhyloTree) from the VCF and, for XY samples, your paternal lineage (Y chromosome, Yleaf + YFull tree) from the Y reads in the CRAM, or from the VCF when there is no alignment. The haplogroup tools live in their own environment: `pixi install -e haplo` (Yleaf is installed from its pinned GitHub release because the bioconda build leaves out its marker data). Design: [ADR-020](docs/DECISIONS.md).
 
 See [docs/DECISIONS.md](docs/DECISIONS.md) for why things are built this way.

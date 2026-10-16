@@ -3,6 +3,16 @@ import type { Row } from './db';
 
 export const OVERALL_PILL: Record<string, string> = { Strong: 'pass', Moderate: 'partial', Limited: '', 'Not callable': 'fail' };
 export const CALL_PILL: Record<string, string> = { High: 'pass', Medium: 'partial', Low: 'warn', 'Not callable': 'fail' };
+// Read re-count verdicts (ADR-022): icon, pill class, short word, tooltip.
+export const RECOUNT: Record<string, { icon: string; pill: string; word: string; title: string }> = {
+  confirmed: { icon: '✓', pill: 'pass', word: 'matches', title: 'Re-counted from the raw reads: they fit the same genotype as the call' },
+  weak: { icon: '~', pill: 'partial', word: 'too few reads', title: 'Re-counted from the raw reads: they lean the same way but are too few to confirm it' },
+  unclear: { icon: '?', pill: 'warn', word: 'unclear', title: 'Re-counted from the raw reads: they don’t clearly fit the call or any other genotype' },
+  disagrees: { icon: '✗', pill: 'fail', word: 'disagrees', title: 'Re-counted from the raw reads: they fit a different genotype than the call' },
+  not_called: { icon: '·', pill: '', word: 'not called', title: 'The variant file gave no usable genotype here; the reads are shown for reference only' },
+  not_checkable: { icon: '–', pill: '', word: 'not checkable', title: 'This position could not be re-counted from the reads' },
+};
+
 export const IMPACT_PILL: Record<string, string> = { HIGH: 'fail', MODERATE: 'partial', LOW: '', MODIFIER: 'soon' };
 
 export const IMPACT_WORD: Record<string, string> = {

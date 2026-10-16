@@ -351,6 +351,8 @@ Then three more questions turn "the variant is pathogenic" into "what it means f
 
 How call confidence is set: DeepVariant must call it PASS. Then a genotype quality (GQ) of at least 30 with at least 15 reads gives High, and a GQ of at least 20 with at least 10 reads gives Medium. A read balance far from what's expected lowers it one step; for one copy, the expected range is 20–80% of reads. Disagreement with the provider's genotype file makes it Low.
 
+**Re-counting the raw reads** (ADR-022) is a second, independent look. At every position a finding rests on, and at every position that defines a medicine-gene result, the pipeline goes back to the CRAM and counts, read by read, which version each read shows. Single-letter variants are read off directly. For insertions and deletions, each whole read is laid against both versions of the local DNA and counted for the one it matches better, which also catches reads the aligner partly set aside (**soft clips**). A simple model then asks which genotype (0, 1 or 2 copies) best explains the counts. If that disagrees with the call, the call drops to Low. If the reads are too few or unclear, or many of them could belong to a look-alike stretch of DNA elsewhere (low **MAPQ**), the call is capped at Medium. A re-count never raises a grade. It checks how the caller read the reads, not the reads themselves; the Genome in a Bottle benchmark below covers that.
+
 **Sensitive findings:** pathogenic results, and results in genes such as *BRCA1/2* or *APOE*, are hidden until you choose to reveal them.
 
 ### Keeping results current
@@ -406,7 +408,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **bgzip / tabix** | Block compression plus index that allow random access into big text files |
 | **Build** | A version of the reference genome |
 | **Callable** | A region with enough good-quality reads to trust a genotype, including "matches reference" |
-| **Call confidence** | How sure we are that your genotype at a position is right (High / Medium / Low), from read depth, GQ and read balance |
+| **Call confidence** | How sure we are that your genotype at a position is right (High / Medium / Low), from read depth, GQ, read balance and a re-count of the raw reads |
 | **Carrier** | Has one altered copy of a recessive gene |
 | **chrM / mtDNA** | Mitochondrial genome |
 | **ClinGen** | Expert consortium rating how strongly each gene is linked to each disease (Definitive → Refuted) |
@@ -446,7 +448,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **LOEUF** | gnomAD measure of how well a gene tolerates broken copies: low (under ~0.35) means healthy people almost never have one, so breaking it likely matters |
 | **LoF** | Loss-of-function: variant expected to disable a gene copy |
 | **Majority allele / reference-minor site** | A spot where the reference genome happens to carry the *rarer* version, so the "variant" listed is actually what most people have. Example: the GRCh37 reference carries Factor V Leiden (rs6025); most people, and a "two copies" result, have the normal version |
-| **MAPQ** | Mapping quality |
+| **MAPQ** | Mapping quality: how sure the aligner is that a read belongs where it was placed; low where a look-alike copy of the DNA exists elsewhere |
 | **MD5 / SHA-256** | File fingerprints (checksums) used to detect any change |
 | **Metaboliser phenotype (metaboliser status)** | How quickly your version of an enzyme processes drugs: poor, intermediate, normal, rapid or ultrarapid |
 | **Missense / nonsense / synonymous** | Changes one amino acid / creates a stop / no amino-acid change |
@@ -481,6 +483,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Pseudogene** | A broken, near-identical copy of a gene (e.g. *CYP2D7* next to *CYP2D6*) that confuses short-read sequencing |
 | **rCRS** | Reference mitochondrial sequence |
 | **Read** | One sequenced DNA fragment (150 letters here) |
+| **Read re-count** | Going back to the raw reads at one position and counting how many show each version, separately from the variant caller, to check the genotype it reported |
 | **Reclassification** | A lab or expert panel changing a variant's ClinVar classification as evidence accumulates |
 | **Reference genome** | The standard map that genomes are compared to |
 | **REF** | The reference allele |
@@ -489,6 +492,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Secondary findings** | Medically actionable results looked for deliberately, beyond the reason a genome was sequenced (see ACMG SF) |
 | **Semi-dominant (SD)** | One copy causes a milder form, two copies a more severe form |
 | **SNP / SNV** | Single-letter variant (SNP usually means a common one) |
+| **Soft clip** | The end of a read that the aligner couldn't match to the reference and set aside; reads carrying a long insertion often look like this |
 | **Splice site** | The boundary of an exon, where RNA is cut and joined; variants here can scramble the protein |
 | **Sporadic** | Usually occurs without being inherited (a new change in that person) |
 | **Star allele (`*`)** | Named haplotype of a pharmacogene |

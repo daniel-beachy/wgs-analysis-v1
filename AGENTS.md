@@ -96,6 +96,7 @@ SELECT * FROM doc_changes;
 | `blood_group` | one blood-group system (ABO, RhD) | `result`, `statement`, `detail` (allele copies, read counts, depth ratio), grades, `quotes` |
 | `cnv_genes` | one ACMG gene in the deletion/duplication scan | `exons`, `min_ratio`/`max_ratio` (GC-corrected depth), `extreme_gc_exons`, `low_mappability_exons` (not judgeable), `status` |
 | `cnv_events` | one candidate deletion/duplication | `delly`, `depth_support`, `mean_ratio`, `gnomad` (JSON), `status` (possible_exon_deletion / … / unconfirmed_signal / common / no_exon), grades. Only `possible_*` rows are findings |
+| `recount` | one position re-counted from the raw reads (finding or PharmCAT position) | `ref_reads`/`alt_reads`, `expected` (copies the call says) vs `observed` (copies the reads fit), `lod`, `status` (confirmed / weak / unclear / disagrees / not_called / not_checkable), `flags` (`look_alike`, `one_strand`), `clear`. `claims.recount` / `claims.recount_status` and `pgx_genes.recount` carry the verdict (ADR-022) |
 | `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
@@ -117,6 +118,7 @@ Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 - `alt_is_major`: the "variant" is actually the common allele (the reference genome carries the rarer one).
 - `sensitive`: the topic needs consent before discussion (see §5).
 - `sources`: JSON list of `{source, version, record, url}` — cite these.
+- `recount_status` + `recount` (JSON): what re-counting the raw reads at this position found (ADR-022). A `disagrees` verdict has already lowered the call to Low; quote the read counts when explaining a call.
 
 Ancestry is similarity to present-day reference people, not a family history: quote shares with their noise floor, say when the nearest population is a group the method can't separate (`doc_ancestry.nearest.group`), and remember a haplogroup is one line of ancestors out of thousands.
 

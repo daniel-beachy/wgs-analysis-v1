@@ -94,6 +94,7 @@
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; color: var(--text); }
   .brand:hover { text-decoration: none; }
   .icon { padding: 4px 8px; }
+  @media (max-width: 700px) { .bar { flex-wrap: wrap; gap: 6px 12px; padding: 8px 16px 4px; } .sample { display: none; } }
   nav { display: flex; gap: 2px; padding: 4px 18px 0; overflow-x: auto; max-width: 1400px; margin: 0 auto; scrollbar-width: none; }
   nav a { white-space: nowrap; padding: 8px 12px; color: var(--muted); border-bottom: 2px solid transparent; font-size: 0.9rem; }
   nav a:hover { color: var(--text); text-decoration: none; }

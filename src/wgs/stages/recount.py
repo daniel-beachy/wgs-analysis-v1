@@ -427,7 +427,7 @@ def site_record(t: Target, c: Counts, v: dict) -> dict:
             "alt_forward": c.alt_fwd, "ref_forward": c.ref_fwd, "low_mapq_reads": c.low_mapq,
             "low_baseq_reads": c.low_baseq, "not_spanning_reads": c.not_spanning, "reads": v["reads"],
             "observed": v["observed"], "lod": v["lod"], "status": v["status"], "flags": v["flags"],
-            "note": v.get("note")}
+            "clear": bool(v["reads"] >= MIN_READS and (v["lod"] or 0) >= MIN_LOD), "note": v.get("note")}
 
 
 def adjust_claims(claims: pd.DataFrame, sites: pd.DataFrame, gene_verdicts: dict[str, dict]) -> pd.DataFrame:
@@ -487,7 +487,7 @@ def gene_verdicts(sites: pd.DataFrame, genes: pd.DataFrame) -> dict[str, dict]:
         uncalled = [{"where": p.rsid or f"{p.chrom}:{p.pos}", "why": p.note, "alt": p.alt,
                      "alt_reads": int(p.alt_reads), "reads": int(p.reads),
                      "observed": None if pd.isna(p.observed) else int(p.observed),
-                     "clear": bool(p.reads >= MIN_READS and (p.lod or 0) >= MIN_LOD)}
+                     "clear": bool(p.clear)}
                     for p in g[g.status == "not_called"].itertuples()]
         out[gene] = {"status": worst, "positions": len(judged), "flags": flags, "kind": "gene", "uncalled": uncalled,
                      "problems": [f"{p.rsid or f'{p.chrom}:{p.pos}'} ({p.status})" for p in problems.itertuples()]}

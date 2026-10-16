@@ -147,3 +147,13 @@ def test_adult_onset_uses_typical_onset():
     assert not special.adult_onset({"typ_age_onset_min": 1, "age_onset_min": 0})
     assert special.adult_onset({"typ_age_onset_min": None, "age_onset_min": 40})
     assert not special.adult_onset({})
+
+
+def test_provider_copies_reads_indel_letters():
+    """tellmeGen writes the ABO O deletion as D / I; GRCh37's reference lacks the base, so I = non-O."""
+    non_o = {"ref": "-", "alt": "C"}
+    assert special.provider_copies("DD", non_o) == 0
+    assert special.provider_copies("DI", non_o) == 1
+    b = {"ref": "G", "alt": "T"}
+    assert special.provider_copies("GG", b) == 0 and special.provider_copies("GT", b) == 1
+    assert special.provider_copies("--", b) is None and special.provider_copies(None, b) is None

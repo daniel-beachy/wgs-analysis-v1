@@ -34,7 +34,7 @@ import pyarrow.parquet as pq
 from .. import evidence as ev
 from ..knowledge import Store
 from ..pipeline import Context, Stage, run, write_json
-from . import pgx, qc, reference, variants
+from . import genotypes, pgx, qc, reference, variants
 
 PMID = "https://pubmed.ncbi.nlm.nih.gov/{}/"
 CITE = {
@@ -610,6 +610,22 @@ def _gene_depth(ctx: Context, symbol: str, min_mapq: int) -> float | None:
     return bases / (end - start)
 
 
+def provider_copies(genotype: str | None, marker: dict) -> int | None:
+    """Copies of a marker's alternative allele in the provider's genotype file (indels are written D / I)."""
+    if not genotype or len(genotype) != 2 or "-" in genotype:
+        return None
+    if set(genotype) <= {"D", "I"}:
+        return genotype.count("I" if marker["ref"] == "-" else "D")
+    return genotype.count(marker["alt"]) if len(marker["alt"]) == 1 and marker["alt"] != "-" else None
+
+
+def _provider(con, ctx: Context, rsids: list[str]) -> dict[str, str]:
+    gp = genotypes.out_path(ctx)
+    if not gp.exists():
+        return {}
+    return dict(con.execute(f"SELECT rsid, genotype FROM '{gp}' WHERE list_contains(?, rsid)", [rsids]).fetchall())
+
+
 def _blood(ctx: Context) -> list[dict]:
     t = blood_table()
     vp, cp = variants.variants_parquet(ctx), ctx.work / "coverage" / "callable.parquet"
@@ -634,8 +650,18 @@ def _blood(ctx: Context) -> list[dict]:
         agree = frac is not None and abs(frac - expect) < 0.25
         reasons.append(f"Independent read count at the O position: {ins} of {ins + other} reads carry the non-O base "
                        f"({'agrees' if agree else 'disagrees'} with the VCF)")
+    raw = _provider(con, ctx, [m["rsid"] for m in (abo["non_o"], *abo["b_markers"])])
+    p_non_o = provider_copies(raw.get(abo["non_o"]["rsid"]), abo["non_o"])
+    p_b = [provider_copies(raw.get(m["rsid"]), m) for m in abo["b_markers"]]
+    provider = None
+    if p_non_o is not None and non_o is not None:
+        same = p_non_o == non_o and (b is None or None in p_b or min(p_b) == b)
+        provider = {"agrees": same, "genotypes": raw}
+        shown = ", ".join(f"{k}: {v}" for k, v in raw.items())
+        reasons.append(f"tellmeGen's own genotype file {'agrees' if same else 'disagrees'} ({shown})")
+        agree = agree and same
     out.append({"system": "ABO", "result": group, "statement": text, "detail": json.dumps(
-                    {"non_o_copies": non_o, "b_copies": b, "a2_copies": a2, "reads": reads}),
+                    {"non_o_copies": non_o, "b_copies": b, "a2_copies": a2, "reads": reads, "provider": provider}),
                 "evidence_level": "Strong",
                 "evidence_reasons": ["The ABO alleles were defined at the DNA level in 1990 and genome-based typing "
                                      "is >99% concordant with serology (quoted)"],
@@ -656,7 +682,9 @@ def _blood(ctx: Context) -> list[dict]:
                 "call_level": "Not callable" if copies is None else "High",
                 "call_reasons": [f"Reads mapping confidently to {rh['gene']}: {d:.1f}× average depth, against "
                                  f"{c:.1f}× on its twin {rh['control']} (ratio {ratio:.2f})" if ratio is not None
-                                 else "Depth not measured"],
+                                 else "Depth not measured",
+                                 "tellmeGen's genotype file lists letters at single positions, so it can't show "
+                                 f"whether the whole {rh['gene']} gene is missing; this result comes from read depth"],
                 "quotes": json.dumps(rh["quotes"] + rh.get("caveats", []))})
     for r in out:
         r["overall"] = ev.overall(r["evidence_level"], r["call_level"])
@@ -1185,7 +1213,7 @@ def _params(ctx: Context) -> dict:
 
 
 STAGE = Stage(
-    name="special", version="4", title="Specialised callers (SMN1, GBA1, repeats, HLA, blood group)", fn=_special,
+    name="special", version="5", title="Specialised callers (SMN1, GBA1, repeats, HLA, blood group)", fn=_special,
     inputs=_inputs,
     outputs=lambda ctx: [out_genes(ctx), out_repeats(ctx), out_hla(ctx), out_blood(ctx), out_cnv(ctx),
                          out_cnv_events(ctx), out_claims(ctx), out_stats(ctx), out_summary(ctx)],
