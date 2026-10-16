@@ -5,6 +5,7 @@ from __future__ import annotations
 from . import (
                ancestry,
                annotate,
+               benchmark,
                coverage,
                genotypes,
                pgs,
@@ -14,6 +15,7 @@ from . import (
                reads,
                recount,
                reference,
+               secondcall,
                special,
                traits,
                variants,
@@ -37,5 +39,7 @@ STAGES = [
     ancestry.STAGE,
     special.STAGE,
     recount.STAGE,
+    benchmark.STAGE,
+    secondcall.STAGE,
     publish.STAGE,
 ]

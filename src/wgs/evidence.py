@@ -149,6 +149,20 @@ def call_confidence(*, filter: str | None, gq: int | None, dp: int | None, vaf: 
 
 
 COPIES_WORD = {0: "no copies", 1: "one copy", 2: "two copies"}
+# Genome in a Bottle's reasons a stretch of the reference is hard to sequence with short reads (ADR-023)
+DIFFICULT_WORD = {
+    "repeat": "the same letter or short pattern repeated many times",
+    "segdup": "a near-identical copy elsewhere in the genome",
+    "low_mappability": "short reads can't be placed here uniquely",
+    "gc": "unusually rich or poor in the letters G and C, which sequence unevenly",
+    "mhc": "the immune-system (HLA) region, which varies enormously between people",
+    "other": "a region GIAB lists as problematic for other reasons (such as gaps or errors in the reference)",
+}
+
+
+def difficult_text(reasons: list[str]) -> str:
+    words = [DIFFICULT_WORD[r] for r in reasons if r in DIFFICULT_WORD and not (r == "other" and "mhc" in reasons)]
+    return "; ".join(words)
 
 
 def _cap(level: str, cap: str) -> str:
@@ -221,6 +235,9 @@ def recount_call(level: str, reasons: list[str], rc: dict | None) -> tuple[str, 
         level = _cap(level, "Medium")
         reasons.append(f"The reads showing {shown} come mostly from one reading direction (strand bias), a known sign "
                        "of sequencing error")
+    if rc.get("difficult"):
+        reasons.append(f"Genome in a Bottle marks this stretch as hard to sequence with short reads "
+                       f"({difficult_text(rc['difficult'])}); calls here are wrong more often than elsewhere")
     return level, reasons
 
 

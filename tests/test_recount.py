@@ -134,3 +134,12 @@ def test_gene_verdict_worst_position():
     v = rc.gene_verdicts(sites, genes)
     assert v["CYP2C19"]["status"] == "disagrees" and "rs2 (disagrees)" in v["CYP2C19"]["problems"]
     assert "CYP2D6" not in v                     # Cyrius reads the raw reads itself
+
+
+def test_long_deletion_is_not_called_a_repeat(tmp_path):
+    """A 150-letter deletion can't be shown whole by 150-letter reads; the note said it sat in a long repeat."""
+    ref = _reference()
+    af, fa = _write(tmp_path, ref, [(s, ref[s:s + 150], "150M") for s in range(400, 500, 10)])
+    t = rc.Target("k", "1", 501, ref[500:651], ref[500], expected=1)
+    c = rc.count_site(af, fa, "chr1", t)
+    assert "150 letters long" in c.note and "repeat" not in c.note

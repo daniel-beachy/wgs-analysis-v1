@@ -256,6 +256,27 @@ CHECKS: list[Check] = [
           "(soft-clipped reads once made a real 32-letter insertion look absent).", ("recount",),
           """SELECT round(100 * avg((status = 'confirmed')::INT), 1) || '% confirmed' FROM recount
              WHERE expected IS NOT NULL HAVING count(*) >= 50 AND avg((status = 'confirmed')::INT) < 0.95"""),
+    Check("benchmark.recount_accuracy", "On a genome whose answer is known, the re-count backs right calls and "
+          "catches wrong ones", "On GIAB HG002's ordinary positions the re-count should confirm at least 98% of "
+          "right calls and let through at most 1 in 200 wrong ones (ADR-023); less means its grades can't be "
+          "trusted.", ("benchmark_sites",),
+          """SELECT round(100 * avg((status = 'confirmed')::INT), 1) || '% of right calls confirmed, '
+                    || sum((wrong LIKE '%"confirmed"%')::INT) || ' wrong calls confirmed'
+             FROM benchmark_sites WHERE len(difficult) = 0
+             HAVING avg((status = 'confirmed')::INT) < 0.98
+                 OR sum((wrong LIKE '%"confirmed"%')::INT) > 0.005 * count(*)"""),
+    Check("benchmark.second_caller", "The second caller is accurate on ordinary single-letter variants",
+          "bcftools on HG002's ordinary positions should reach at least 99% precision and 98% recall for "
+          "single-letter variants (ADR-023); less points to a setup error in how it is run.", ("benchmark_calls",),
+          """SELECT 'precision ' || round(100 * tp / (tp + fp), 1) || '%, recall ' || round(100 * tpb / (tpb + fn), 1)
+                    || '%' FROM (SELECT sum((label = 'tp')::INT) AS tp, sum((label = 'fp')::INT) AS fp,
+                    sum((label = 'tp_base')::INT) AS tpb, sum((label = 'fn')::INT) AS fn FROM benchmark_calls
+                    WHERE kind = 'snv' AND len(difficult) = 0)
+             WHERE tp + fp > 100 AND (tp / (tp + fp) < 0.99 OR tpb / (tpb + fn) < 0.98)"""),
+    Check("secondcall.recounted", "Every variant only the second caller found was re-counted",
+          "A variant the VCF lacks has no grade; the re-count is what says whether the reads support it.",
+          ("second_caller",),
+          "SELECT chrom || ':' || pos FROM second_caller WHERE verdict IS NULL OR recount IS NULL"),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

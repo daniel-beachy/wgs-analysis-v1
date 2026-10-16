@@ -157,3 +157,37 @@ def test_provider_copies_reads_indel_letters():
     b = {"ref": "G", "alt": "T"}
     assert special.provider_copies("GG", b) == 0 and special.provider_copies("GT", b) == 1
     assert special.provider_copies("--", b) is None and special.provider_copies(None, b) is None
+
+
+def test_panel_exons_breaks_ties_the_same_way_every_time(tmp_path, monkeypatch):
+    """TNNT2 has no MANE Select match in Ensembl r87 and several transcripts with the same number of exons; the pick
+    was arbitrary, so the exon list (and the HG002 regions built from it) changed between runs."""
+    import gzip
+
+    import pandas as pd
+
+    genes = tmp_path / "genes.parquet"
+    pd.DataFrame([{"symbol": "TNNT2", "gene_id": "ENSG1", "chrom": "1", "start": 100, "end": 900}]).to_parquet(genes)
+    mane = tmp_path / "mane.parquet"
+    pd.DataFrame([{"transcript": "ENST99", "status": "MANE Select"}]).to_parquet(mane)
+    gff = tmp_path / "a.gff3.gz"
+    lines = []
+    for tx, starts in (("ENST00000509001", (100, 300)), ("ENST00000367318", (110, 310))):
+        lines.append(f"1\t.\tmRNA\t100\t900\t.\t+\t.\tID=transcript:{tx};Parent=gene:ENSG1;biotype=protein_coding")
+        lines += [f"1\t.\texon\t{s}\t{s + 50}\t.\t+\t.\tParent=transcript:{tx};rank={i}"
+                  for i, s in enumerate(starts, 1)]
+    with gzip.open(gff, "wt") as fh:
+        fh.write("\n".join(lines) + "\n")
+    acmg = tmp_path / "acmg.csv"
+    acmg.write_text("gene,inheritance,condition\nTNNT2,AD,Cardiomyopathy\n")
+    monkeypatch.setattr(special, "ACMG_LIST", acmg)
+
+    class St:
+        def table(self, src, name):
+            return {"genes": genes, "transcripts": mane}[name]
+
+        def file(self, src, name):
+            return gff
+
+    picks = {e["transcript"] for _ in range(5) for e in special.panel_exons(St())}
+    assert picks == {"ENST00000367318"}

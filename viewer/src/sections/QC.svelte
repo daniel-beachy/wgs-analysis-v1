@@ -10,7 +10,7 @@
   import Bars from '../components/Bars.svelte';
   import Line from '../components/Line.svelte';
   import GenomeDepth from '../components/GenomeDepth.svelte';
-  import { RECOUNT } from '../lib/evidence';
+  import { RECOUNT, DIFFICULT, difficultText } from '../lib/evidence';
 
   let { m }: { m: Manifest } = $props();
 
@@ -37,6 +37,7 @@
   const load = $derived(Promise.all([
     loadDoc(m, 'qc'), loadDoc(m, 'coverage'), loadDoc(m, 'alignment_stats'), loadDoc(m, 'fastq_stats'),
     loadDoc(m, 'reference_full'), loadDoc(m, 'inventory'), loadDoc(m, 'sections'), loadDoc(m, 'checks'),
+    loadDoc(m, 'benchmark'), loadDoc(m, 'secondcall'),
   ]));
 
   let bins = $state<{ chrom: string; start: number; depth: number }[]>([]);
@@ -69,6 +70,28 @@
   const rcExceptions = $derived(rc.filter((r) => r.status !== 'confirmed' || (r.flags ?? []).length)
     .sort((a, b) => RC_PRIORITY.indexOf(a.status) - RC_PRIORITY.indexOf(b.status)));
 
+  // Accuracy benchmark on Genome in a Bottle's HG002, and a second variant caller on your own reads (ADR-023).
+  let sc = $state<any[]>([]);
+  $effect(() => {
+    if (!m.tables.second_caller) return;
+    useRelease(m).then(() => query('SELECT * FROM second_caller ORDER BY TRY_CAST(chrom AS INTEGER), pos')).then((r) => (sc = r.rows as any));
+  });
+  const KIND: Record<string, string> = { all: 'All changes', snv: 'Single letters', indel: 'Insertions / deletions' };
+  const REGION: Record<string, string> = { all: 'everywhere', easy: 'ordinary', difficult: 'hard to sequence' };
+  const SC_VERDICT: Record<string, { word: string; pill: string }> = {
+    reads_support: { word: 'reads show it', pill: 'pass' },
+    reads_flagged: { word: 'reads show it, placed uncertainly', pill: 'partial' },
+    unclear: { word: 'unclear', pill: 'warn' },
+    reads_disagree: { word: 'reads don’t show it', pill: 'fail' },
+  };
+  const POP: Record<string, string> = { gnomad_filtered: 'gnomAD flags the site', common: 'common (1% or more)', rare: 'rare (under 1%)', not_seen: 'not seen' };
+  const VCF_SAID: Record<string, string> = { NoCall: 'looked, couldn’t decide', RefCall: 'looked, saw no variant', PASS: 'called a different change here' };
+  const smallPct = (f: number | null | undefined) => (f == null ? '—' : f >= 0.1 ? pct(f, 0) : f >= 0.01 ? pct(f, 1) : pct(f, 2));
+  const seenText = (r: any) => (r.population === 'gnomad_filtered' ? 'gnomAD flags this site as unreliable'
+    : [r.gnomad_af != null ? `${smallPct(r.gnomad_af)} in gnomAD` : '', r.af_1kg != null ? `${smallPct(r.af_1kg)} in 1000 Genomes` : ''].filter(Boolean).join(', ') || 'not seen in gnomAD or 1000 Genomes');
+  const scShown = $derived(sc.filter((r) => ['reads_support', 'reads_flagged'].includes(r.verdict) && r.population !== 'gnomad_filtered'));
+  const scOther = $derived(sc.filter((r) => !scShown.includes(r)));
+
   const fmtBp = (v: number) => `${(v / 1e6).toFixed(0)} Mb`;
   const subColor = (s: string) => (['A>G', 'G>A', 'C>T', 'T>C'].includes(s) ? 'var(--accent)' : 'var(--accent-2)');
   const chromLabel = (c: string) => (c === 'MT' ? 'M' : c);
@@ -76,7 +99,7 @@
 
 {#await load}
   <p class="muted">Loading QC…</p>
-{:then [qc, cov, aln, fq, full, inv, sections, selfc]}
+{:then [qc, cov, aln, fq, full, inv, sections, selfc, bench, second]}
   {#if !qc}
     <Card title="No QC results yet"><p>Run <code>pixi run wgs run</code> to compute data-quality checks.</p></Card>
   {:else}
@@ -247,7 +270,8 @@
                     <td data-label="Reads say">{copiesWord(r.observed)}{#if r.observed != null && r.clear === false}<div class="faint">too few reads to be sure</div>{/if}</td>
                     <td data-label="Verdict"><span class="pill {RECOUNT[r.status]?.pill}" title={RECOUNT[r.status]?.title}>{RECOUNT[r.status]?.word}</span>
                       {#each r.flags ?? [] as f}<div class="faint">{RC_FLAG[f] ?? f}</div>{/each}
-                      {#if r.note}<div class="faint">{r.note}</div>{/if}</td>
+                      {#if r.note}<div class="faint">{r.note}</div>{/if}
+                      {#if (r.difficult ?? []).length}<div class="faint">hard to sequence: {difficultText(r.difficult)}</div>{/if}</td>
                   </tr>
                 {/each}
               </tbody>
@@ -256,6 +280,142 @@
           <Explain learn="How this project grades its confidence">
             <p>Your variant file was made by tellmeGen’s variant caller (DeepVariant) from these same reads. Counting them again with a simple, open method checks that the caller read them correctly. Single-letter changes are read straight off each read. For insertions and deletions, each whole read is laid against both versions of the DNA there and counted for the one it fits better, which also catches reads the aligner partly set aside (<Term t="Soft clip" label="soft clips" />). A binomial model (<a href="https://pubmed.ncbi.nlm.nih.gov/21903627/" target="_blank" rel="noreferrer">Li 2011</a>) then asks whether the counts fit 0, 1 or 2 copies, and needs that answer to be at least 100 times likelier than the next, with at least 8 usable reads.</p>
             <p>If the reads fit a different genotype, the finding’s call drops to Low. If they are too few or unclear, or many could belong to a look-alike stretch of DNA elsewhere (low <Term t="MAPQ" />), the call is capped at Medium. A re-count never raises a grade. Positions the variant file left uncalled are shown here for information only. What this can’t catch is an error in the reads themselves; the Genome in a Bottle benchmark measures that.</p>
+          </Explain>
+        </Card>
+      {/if}
+
+      {#if bench?.recount}
+        {@const grp = (k: string, r: string) => bench.recount.groups.find((x: any) => x.kind === k && x.region === r)}
+        {@const easy = grp('all', 'easy')}
+        {@const hard = grp('all', 'difficult')}
+        {@const d = bench.data}
+        {@const cal = bench.caller}
+        <Card title="Checked on a genome whose answer is known" subtitle={`Genome in a Bottle’s reference person HG002, whose DNA letters are known almost exactly, went through the same checks: ${int(d.truth_alleles)} true variants and ${int(d.decoys)} variants HG002 doesn’t have, in the same genes and medicine positions as yours.`}>
+          <div class="grid cols-4">
+            <div><div class="kpi">{pct(easy.right_confirmed)}</div><div class="muted small">of correct calls confirmed by the re-count in ordinary stretches</div></div>
+            <div><div class="kpi">{pct(easy.wrong_caught)}</div><div class="muted small">of wrong claims caught in ordinary stretches</div></div>
+            <div><div class="kpi">{pct(hard.right_confirmed)}</div><div class="muted small">of correct calls confirmed in <Term t="Hard-to-sequence region" label="hard-to-sequence stretches" /></div></div>
+            <div><div class="kpi">{pct(hard.wrong_caught)}</div><div class="muted small">of wrong claims caught there</div></div>
+          </div>
+          <h4 class="gap">The re-count, by kind of change</h4>
+          <div class="tablewrap"><table class="small rc-table">
+            <thead><tr><th>Change</th><th>Stretch</th><th class="num">Positions</th><th class="num">Correct calls confirmed</th><th class="num">Correct calls rejected</th><th class="num">Wrong claims caught</th><th class="num">Wrong claims let through</th></tr></thead>
+            <tbody>
+              {#each ['snv', 'indel'] as k}
+                {#each ['easy', 'difficult'] as r}
+                  {@const x = grp(k, r)}
+                  {#if x}<tr><td>{KIND[k]}</td><td>{REGION[r]}</td><td class="num">{int(x.sites)}</td><td class="num">{pct(x.right_confirmed)}</td><td class="num">{pct(x.right_false_alarm, 2)}</td><td class="num">{pct(x.wrong_caught)}</td><td class="num">{pct(x.wrong_confirmed, 2)}</td></tr>{/if}
+                {/each}
+              {/each}
+            </tbody>
+          </table></div>
+          <h4 class="gap">Hard-to-sequence stretches, by reason</h4>
+          <div class="tablewrap"><table class="small rc-table">
+            <thead><tr><th>Why the stretch is hard</th><th class="num">Positions</th><th class="num">Correct calls confirmed</th><th class="num">Wrong claims let through</th></tr></thead>
+            <tbody>
+              {#each bench.recount.by_reason as x}
+                <tr><td>{DIFFICULT[x.reason] ?? x.reason}</td><td class="num">{int(x.sites)}</td><td class="num">{pct(x.right_confirmed)}</td><td class="num">{pct(x.wrong_confirmed, 2)}</td></tr>
+              {/each}
+            </tbody>
+          </table></div>
+          {#if cal?.groups}
+            {@const cg = (k: string, r: string) => cal.groups.find((x: any) => x.kind === k && x.region === r)}
+            {@const all = cg('all', 'all')}
+            <h4 class="gap">A second variant caller (bcftools)</h4>
+            <p class="small">Of the variants bcftools called, <strong>{pct(all.precision)}</strong> were real (its <Term t="Precision / recall / F1" label="precision" />), and it found <strong>{pct(all.recall)}</strong> of HG002’s true variants (recall). Where the re-count also confirmed a call, {pct(all.precision_if_confirmed)} were real.</p>
+            <div class="tablewrap"><table class="small rc-table">
+              <thead><tr><th>Change</th><th>Stretch</th><th class="num">Calls that were real</th><th class="num">True variants found</th></tr></thead>
+              <tbody>
+                {#each ['all', 'snv', 'indel'] as k}
+                  {#each ['easy', 'difficult'] as r}
+                    {@const x = cg(k, r)}
+                    {#if x}<tr><td>{KIND[k]}</td><td>{REGION[r]}</td><td class="num">{pct(x.precision)}</td><td class="num">{pct(x.recall)}</td></tr>{/if}
+                  {/each}
+                {/each}
+              </tbody>
+            </table></div>
+            {#if cal.by_population?.length}
+              <h4 class="gap">Calls by how often other people carry them</h4>
+              <div class="tablewrap"><table class="small rc-table">
+                <thead><tr><th>In gnomAD and 1000 Genomes</th><th class="num">bcftools calls</th><th class="num">Real</th></tr></thead>
+                <tbody>
+                  {#each cal.by_population as x}
+                    <tr><td>{POP[x.population] ?? x.population}</td><td class="num">{int(x.calls)}</td><td class="num">{int(x.tp)} ({pct(x.precision, 0)})</td></tr>
+                  {/each}
+                </tbody>
+              </table></div>
+            {/if}
+          {/if}
+          <Explain learn="Accuracy benchmarking (Genome in a Bottle)">
+            <p>Genome in a Bottle, run by the US National Institute of Standards and Technology, combined many sequencing technologies to work out HG002’s true variants (<a href="https://pubmed.ncbi.nlm.nih.gov/36452119/" target="_blank" rel="noreferrer">Wagner 2022</a>). HG002’s reads from a DNBSEQ sequencer, the same family as yours, were downloaded for these regions only and thinned from {d.full_depth}× to {d.depth}× to match your genome. The re-count was given every true variant with its true number of copies, and also wrong claims: one copy too many or too few, and ClinVar variants HG002 doesn’t carry. bcftools’ calls were matched to the truth with RTG vcfeval, which recognises the same change written in different ways (<a href="https://pubmed.ncbi.nlm.nih.gov/30858580/" target="_blank" rel="noreferrer">Krusche 2019</a>).</p>
+            <p>Hard-to-sequence stretches come from Genome in a Bottle’s map of the genome (<a href="https://pubmed.ncbi.nlm.nih.gov/39424793/" target="_blank" rel="noreferrer">Dwarshuis 2024</a>). Errors gather there, mostly insertions and deletions in runs of one repeated letter, whose length short reads miscount. Your findings in such stretches say so in their call reasons. Their grade stays the same, because the re-count still caught {pct(hard.wrong_caught, 0)} of wrong claims there and an unclear re-count already caps a call at Medium.</p>
+            <p>gnomAD marks sites whose calls fail its own quality checks (<a href="https://pubmed.ncbi.nlm.nih.gov/32461654/" target="_blank" rel="noreferrer">Karczewski 2020</a>). On HG002 a call at such a site was usually wrong, which is why the second opinion below sorts by it. Not measured here: DeepVariant itself (it doesn’t run on this computer), the X chromosome, and stretches where even Genome in a Bottle’s truth is uncertain.</p>
+          </Explain>
+        </Card>
+      {/if}
+
+      {#if second}
+        {@const flagged = bench?.caller?.by_population?.find((x: any) => x.population === 'gnomad_filtered')}
+        {@const common = bench?.caller?.by_population?.find((x: any) => x.population === 'common')}
+        {@const indelEasy = bench?.caller?.groups?.find((x: any) => x.kind === 'indel' && x.region === 'easy')}
+        <Card title="A second opinion on your genome" subtitle="bcftools, a simpler variant caller, read your own reads in the ACMG genes and at the medicine positions; RTG vcfeval then compared its calls with your variant file.">
+          <div class="grid cols-3">
+            <div><div class="kpi">{int(second.matched)}</div><div class="muted small">variants both callers found</div></div>
+            <div><div class="kpi">{int(second.only_bcftools)}</div><div class="muted small">found only by bcftools</div></div>
+            <div><div class="kpi">{int(second.only_vcf)}</div><div class="muted small">only in your variant file ({int(second.only_vcf_by_kind?.indel ?? 0)} of them insertions or deletions)</div></div>
+          </div>
+          {#if second.only_bcftools}
+            <h4 class="gap">The {int(second.only_bcftools)} variants only bcftools found</h4>
+            <div class="tablewrap"><table class="small rc-table">
+              <thead><tr><th>Re-counted reads</th>{#each Object.keys(POP) as p}<th class="num">{POP[p]}</th>{/each}</tr></thead>
+              <tbody>
+                {#each Object.keys(SC_VERDICT) as v}
+                  {#if second.verdicts?.[v]}
+                    <tr><td><span class="pill {SC_VERDICT[v].pill}">{SC_VERDICT[v].word}</span></td>
+                      {#each Object.keys(POP) as p}{@const n = second.population?.[v]?.[p] ?? 0}<td class="num" class:faint={!n}>{int(n)}</td>{/each}</tr>
+                  {/if}
+                {/each}
+              </tbody>
+            </table></div>
+            <p class="small">{second.clinvar_pathogenic ? `${second.clinvar_pathogenic} of them are listed in ClinVar as pathogenic or likely pathogenic.` : 'None of them is listed in ClinVar as pathogenic or likely pathogenic.'}
+              {#if flagged && common}On HG002, bcftools calls at sites gnomAD flags were real {flagged.tp} times out of {flagged.calls}; at common sites, {pct(common.precision)} were.{/if}</p>
+          {/if}
+          {#if scShown.length}
+            <h4 class="gap">Shown by your reads and not flagged by gnomAD</h4>
+            <div class="tablewrap"><table class="small rc-table rc-stack">
+              <thead><tr><th>Gene / position</th><th>Change</th><th class="num">Reads: usual / variant</th><th>Your variant file</th><th>Seen in other people</th><th>Notes</th></tr></thead>
+              <tbody>
+                {#each scShown as r (`${r.chrom}:${r.pos}:${r.alt}`)}
+                  <tr>
+                    <td><strong>{r.gene ?? '—'}</strong><div class="mono faint">{r.chrom}:{r.pos}</div></td>
+                    <td class="mono" data-label="Change">{shortAllele(r.ref)}→{shortAllele(r.alt)}</td>
+                    <td class="num" data-label="Reads: usual / variant">{r.ref_reads} / {r.alt_reads}{#if r.low_mapq_reads}<div class="faint">+{r.low_mapq_reads} placed uncertainly</div>{/if}</td>
+                    <td data-label="Your variant file">{VCF_SAID[r.vcf_filter] ?? 'no record'}{#if r.vcf_pass_nearby != null}<div class="faint">a different change {r.vcf_pass_nearby} letter{r.vcf_pass_nearby === 1 ? '' : 's'} away</div>{/if}</td>
+                    <td data-label="Seen in other people">{seenText(r)}</td>
+                    <td class="notes" data-label="Notes">{#if r.clinvar_significance}<div>ClinVar: {r.clinvar_significance.replaceAll('_', ' ')}</div>{/if}
+                      {#if (r.difficult ?? []).length}<div class="faint">hard to sequence: {difficultText(r.difficult)}</div>{/if}
+                      {#if r.verdict === 'reads_flagged'}<div class="faint">{RC_FLAG.look_alike}</div>{/if}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table></div>
+          {/if}
+          {#if scOther.length}
+            <details class="small"><summary>The other {scOther.length}: unclear, or at sites gnomAD flags</summary>
+              <div class="tablewrap"><table class="small rc-table">
+                <thead><tr><th>Gene / position</th><th>Change</th><th class="num">Reads</th><th>Re-count</th><th>Seen in other people</th></tr></thead>
+                <tbody>
+                  {#each scOther as r (`${r.chrom}:${r.pos}:${r.alt}`)}
+                    <tr><td><strong>{r.gene ?? '—'}</strong> <span class="mono faint">{r.chrom}:{r.pos}</span></td><td class="mono">{shortAllele(r.ref)}→{shortAllele(r.alt)}</td>
+                      <td class="num">{r.ref_reads} / {r.alt_reads}</td><td>{SC_VERDICT[r.verdict]?.word ?? r.verdict}</td><td>{seenText(r)}</td></tr>
+                  {/each}
+                </tbody>
+              </table></div>
+            </details>
+          {/if}
+          <Explain learn="Accuracy benchmarking (Genome in a Bottle)">
+            <p>Two <Term t="Variant caller" label="variant callers" /> reading the same reads mostly disagree where the reads are hard to interpret: runs of a repeated letter, and stretches with a look-alike copy elsewhere. A variant only bcftools found is a lead, not a finding. It has no annotation or grade, and nothing in the other tabs changes because of it. “Looked, couldn’t decide” means DeepVariant saw the evidence but gave no genotype (NoCall); only a clinical test could settle such a position if it ever mattered.</p>
+            <p>Several differences close together that gnomAD flags, with almost nobody carrying two copies, are the usual sign of reads from a look-alike copy placed in the wrong spot. The re-count can’t tell, because it counts the same placed reads. Most variants only in your file are insertions or deletions, which bcftools handles less well{#if indelEasy} (on HG002 it found {pct(indelEasy.recall, 0)} of them even in ordinary stretches){/if}.</p>
           </Explain>
         </Card>
       {/if}
@@ -397,6 +557,8 @@
   .name { font-weight: 600; margin-top: 6px; }
   .why { margin: 10px 0 0; }
   h4 { font-size: 0.9rem; margin: 6px 0; color: var(--muted); font-weight: 600; }
+  h4.gap { margin-top: 18px; }
+  details > summary { cursor: pointer; margin-top: 12px; }
   td.num { white-space: nowrap; }
   tr.alarm td { color: var(--warn); font-weight: 600; }
   .tablewrap { overflow-x: auto; }
@@ -410,6 +572,7 @@
     .rc-stack td { border: 0; padding: 2px 6px; white-space: normal; text-align: left; }
     .rc-stack td[data-label]::before { content: attr(data-label) ': '; color: var(--faint); }
     .rc-stack td .faint, .rc-stack td .pill { display: inline; margin-left: 4px; }
+    .rc-stack td.notes .faint { display: block; margin-left: 0; }
     .rc-stack tr { border-bottom: 1px solid var(--border); padding: 6px 0; }
   }
 </style>

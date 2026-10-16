@@ -27,6 +27,7 @@ nodejs = ">=26.10.0,<26.11"
 go = ">=1.27.1,<2"
 slivar = ">=0.3.3"
 zstandard = ">=0.25.0,<0.26"
+rtg-tools = ">=3.13"
 
 [pypi-dependencies]
 wgs = { path = ".", editable = true }

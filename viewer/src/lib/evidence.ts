@@ -13,6 +13,18 @@ export const RECOUNT: Record<string, { icon: string; pill: string; word: string;
   not_checkable: { icon: '–', pill: '', word: 'not checkable', title: 'This position could not be re-counted from the reads' },
 };
 
+// Why Genome in a Bottle marks a stretch as hard to sequence (mirrors evidence.DIFFICULT_WORD; ADR-023)
+export const DIFFICULT: Record<string, string> = {
+  repeat: 'the same letter or short pattern repeated many times',
+  segdup: 'a near-identical copy elsewhere in the genome',
+  low_mappability: 'short reads can’t be placed here uniquely',
+  gc: 'unusually rich or poor in the letters G and C, which sequence unevenly',
+  mhc: 'the immune-system (HLA) region, which varies enormously between people',
+  other: 'a region GIAB lists as problematic for other reasons (such as gaps or errors in the reference)',
+};
+export const difficultText = (reasons: string[] | null | undefined) =>
+  (reasons ?? []).filter((r) => DIFFICULT[r] && !(r === 'other' && reasons!.includes('mhc'))).map((r) => DIFFICULT[r]).join('; ');
+
 export const IMPACT_PILL: Record<string, string> = { HIGH: 'fail', MODERATE: 'partial', LOW: '', MODIFIER: 'soon' };
 
 export const IMPACT_WORD: Record<string, string> = {

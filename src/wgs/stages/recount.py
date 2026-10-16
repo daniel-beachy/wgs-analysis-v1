@@ -24,6 +24,7 @@ import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
 from .. import evidence as ev
+from ..knowledge import Store
 from ..pipeline import Context, Stage, write_json
 from . import annotate, pgx, qc, reference, special
 
@@ -242,9 +243,13 @@ def count_site(af, fasta, contig: str, t: Target) -> Counts:
     seq = fasta.fetch(contig, start, t.pos - 1 + len(t.ref) + FLANK)
     h = haplotypes(seq, start, t)
     if h is None:
-        c.note = "the variant sits in a repeat too long for single reads to cross" if seq[
-            t.pos - 1 - start:t.pos - 1 - start + len(t.ref)].upper() == t.ref.upper() \
-            else "the reference letters here don't match the call"
+        if seq[t.pos - 1 - start:t.pos - 1 - start + len(t.ref)].upper() != t.ref.upper():
+            c.note = "the reference letters here don't match the call"
+        elif abs(len(t.ref) - len(t.alt)) + 1 > MAX_SPAN:
+            c.note = (f"the change is {abs(len(t.ref) - len(t.alt)):,} letters long, too long for reads to show it "
+                      "whole; read depth or long reads are needed")
+        else:
+            c.note = "the variant sits in a repeat too long for single reads to cross"
         return c
     ws, we, _, _ = h
     c.window = (ws, we)
@@ -452,14 +457,28 @@ def adjust_claims(claims: pd.DataFrame, sites: pd.DataFrame, gene_verdicts: dict
     return out
 
 
+def difficult_reasons(sites: pd.DataFrame, difficult: Path | None) -> list[list[str]]:
+    """GIAB's reasons each position is hard to sequence (ADR-023), one list per row of `sites` (chrom, pos, ref)."""
+    if difficult is None or sites.empty:
+        return [[] for _ in range(len(sites))]
+    s = pd.DataFrame({"chrom": sites["chrom"].astype(str).to_numpy(), "pos": sites["pos"].astype(int).to_numpy(),
+                      "span": sites["ref"].fillna("N").str.len().clip(lower=1).to_numpy(), "i": range(len(sites))})
+    con = duckdb.connect()
+    con.register("s", s)
+    got = dict(con.execute(f"""SELECT s.i, list(DISTINCT d.reason ORDER BY d.reason) FROM s JOIN '{difficult}' d
+        ON d.chrom = s.chrom AND d.start < s.pos - 1 + s.span AND d."end" > s.pos - 1 GROUP BY 1""").fetchall())
+    return [list(got.get(i, [])) for i in range(len(sites))]
+
+
 def _as_list(x) -> list:
     return [] if x is None else list(x)
 
 
 def _public(rc: dict) -> dict:
     keep = ("status", "ref", "alt", "ref_reads", "alt_reads", "other_reads", "low_mapq_reads", "expected", "observed",
-            "ploidy", "lod", "flags", "note", "positions", "problems", "kind", "uncalled")
-    return {k: (list(v) if k in ("flags", "problems") and v is not None else v) for k, v in rc.items() if k in keep}
+            "ploidy", "lod", "flags", "note", "positions", "problems", "kind", "uncalled", "difficult")
+    return {k: (list(v) if k in ("flags", "problems", "difficult") and v is not None else v) for k, v in rc.items()
+            if k in keep}
 
 
 STATUS_RANK = {"disagrees": 0, "unclear": 1, "weak": 2, "confirmed": 3}
@@ -557,6 +576,7 @@ def _recount(ctx: Context) -> dict:
             records.append(site_record(t, c, classify(c, t)))
     sites = pd.DataFrame.from_records(records)
     sites["flags"] = sites["flags"].map(lambda f: list(f))
+    sites["difficult"] = difficult_reasons(sites, Store(ctx.cfg).table("giab", "difficult"))
     sites.to_parquet(out_sites(ctx), index=False)
     verdicts = gene_verdicts(sites, genes)
     adjust_claims(claims, sites, verdicts).to_parquet(out_claims(ctx), index=False)
@@ -579,7 +599,8 @@ def _inputs(ctx: Context) -> list[Path]:
     aln = ctx.inv.first("cram") or ctx.inv.first("bam")
     paths = pgx.out_paths(ctx)
     return [p for p in (aln.path if aln else None, *claim_sources(ctx), paths["positions"], paths["genes"],
-                        variants.variants_parquet(ctx), qc.out_path(ctx)) if p and p.exists()]
+                        variants.variants_parquet(ctx), qc.out_path(ctx), Store(ctx.cfg).table("giab", "difficult"))
+            if p and p.exists()]
 
 
 def _available(ctx: Context) -> str | None:
@@ -593,7 +614,7 @@ def _available(ctx: Context) -> str | None:
 
 
 STAGE = Stage(
-    name="recount", version="1", title="Re-count the reads behind every finding", fn=_recount,
+    name="recount", version="2", title="Re-count the reads behind every finding", fn=_recount,
     inputs=_inputs, outputs=lambda ctx: [out_sites(ctx), out_claims(ctx), out_summary(ctx)],
     available=_available, params=lambda ctx: {"evidence_model": ev.MODEL_VERSION, "settings": SETTINGS},
 )

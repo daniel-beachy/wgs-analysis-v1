@@ -373,6 +373,15 @@ The joining happens on your own computer. Your variants are never sent to an onl
 - **Recall / sensitivity:** of the real variants, the fraction we found (few misses).
 - **F1:** a single score balancing the two.
 
+What this project measures on HG002 (ADR-023). Genome in a Bottle also shares HG002's raw reads. The reads from a DNBSEQ sequencer, the same family as yours, are downloaded only for the genes and medicine positions the findings come from, and thinned to 30× so they look like a typical consumer genome. Two of the pipeline's methods are then run on them and compared with the truth:
+
+1. **The read re-count** (§9) is handed every true variant with its true number of copies, and also wrong claims (one copy too many or too few, and ClinVar variants HG002 doesn't carry). A good check confirms the right claims and rejects the wrong ones. It confirms about 99.6% of right claims and rejects about 99.4% of wrong ones in ordinary stretches of DNA.
+2. **A second variant caller, bcftools**, makes its own calls from the reads. Its precision and recall show how often a different, simpler method agrees with the truth.
+
+**Hard-to-sequence regions.** Errors are not spread evenly. Genome in a Bottle publishes a map of the stretches where short reads struggle, each with its reason: a **homopolymer** or other short repeat (reads miscount the length), a **segmental duplication** (a near-identical copy elsewhere, so reads may land on the wrong copy), extreme GC content (sequenced unevenly), and the hugely variable HLA region. Both methods are measured separately inside and outside these stretches. Inside, insertions and deletions in repeats are the weak spot. A finding of yours inside such a stretch says so in its call reasons, and its grade stays the same, because the re-count still catches most wrong claims there. ADR-023 explains that choice with the numbers.
+
+**A second opinion on your genome.** bcftools is also run on your own reads in the same regions, and its calls are compared with your variant file. Where it finds a variant your file lacks, the reads are re-counted and the variant is looked up in gnomAD. gnomAD flags sites where its own calls fail quality checks. On HG002, calls at such sites were mostly wrong: the usual cause is reads from a look-alike copy placed in the wrong spot. These extra variants are leads, not findings, and they don't change any result.
+
 ## 10. What sequencing cannot tell you
 
 - **Most traits are mostly not genetic, or involve thousands of genes.** Environment, lifestyle and chance matter a lot.
@@ -437,11 +446,13 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **GQ** | Genotype quality (Phred-scaled) |
 | **gVCF** | A VCF that also lists reference-matching blocks (yours is *not* a gVCF) |
 | **Haplogroup** | Branch of the maternal (mtDNA) or paternal (Y) lineage tree |
+| **Hard-to-sequence region** | A stretch where short reads are often wrong: runs of one repeated letter, near-identical copies elsewhere, extreme GC content. Genome in a Bottle maps them, with the reason |
 | **Hemizygous** | Only one copy present (e.g. X in XY people) |
 | **Heteroplasmy** | A mitochondrial variant present in only some mtDNA copies |
 | **Heterozygous / homozygous** | Two different / two identical alleles |
 | **HGVS** | Standard notation for describing variants (`c.` = coding DNA, `p.` = protein) |
 | **HLA (human leukocyte antigen)** | Immune-system genes that label your cells as "self"; extremely variable, and some versions predict severe drug reactions |
+| **Homopolymer** | A run of one repeated letter (`AAAAAAAA`); reads often miscount its length, so insertions and deletions there are error-prone |
 | **Impact** | How disruptive a consequence is: High (likely breaks protein), Moderate, Low, Modifier (non-coding) |
 | **Indel** | Small insertion or deletion |
 | **Inheritance** | How a condition passes through families: dominant, recessive, X-linked, mitochondrial, etc. It decides what one copy of a variant means for you |
@@ -475,7 +486,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **Phred score (Q)** | Quality on a log scale: Q30 = 1 in 1,000 error |
 | **Pileup** | The stack of reads over a position |
 | **Popmax** | The highest allele frequency of a variant in any single gnomAD population |
-| **Precision / recall / F1** | Benchmark accuracy measures |
+| **Precision / recall / F1** | Benchmark accuracy measures: precision = share of calls that are real; recall = share of real variants found; F1 balances the two |
 | **Predicted (computer prediction)** | A variant flagged by AI/statistical tools but never classified by a lab; always graded Limited here |
 | **Principal components (PCA)** | A few axes that summarise how DNA differs between people; people with similar ancestry sit close together |
 | **Prodrug (pro-drug)** | A medicine that does nothing until an enzyme converts it into its active form (codeine → morphine, clopidogrel) |
@@ -490,6 +501,7 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **REVEL** | A score (0–1) combining 13 prediction tools for missense variants; ClinGen thresholds: 0.644 supporting, 0.773 moderate, 0.932 strong evidence of harm |
 | **Review stars** | ClinVar's 0–4★ measure of how well-supported a classification is |
 | **Secondary findings** | Medically actionable results looked for deliberately, beyond the reason a genome was sequenced (see ACMG SF) |
+| **Segmental duplication** | A stretch of over 1,000 letters with a near-identical copy elsewhere in the genome, so reads from one copy can be placed on the other |
 | **Semi-dominant (SD)** | One copy causes a milder form, two copies a more severe form |
 | **SNP / SNV** | Single-letter variant (SNP usually means a common one) |
 | **Soft clip** | The end of a read that the aligner couldn't match to the reference and set aside; reads carrying a long insertion often look like this |
@@ -500,9 +512,11 @@ The joining happens on your own computer. Your variants are never sent to an onl
 | **T1K** | Open tool that types HLA (and other highly variable) genes from sequencing reads |
 | **Ti/Tv** | Transition-to-transversion ratio (QC metric) |
 | **Transition / transversion** | A↔G or C↔T / all other single-letter swaps |
+| **Truth set** | Genome in a Bottle's list of a reference person's true variants, plus the regions where that list is reliable |
 | **UTR** | Untranslated region: the start (5′) and end (3′) of a gene's message that isn't turned into protein |
 | **VAF** | Variant allele fraction: share of reads showing the variant |
 | **Variant** | A position where your DNA differs from the reference genome — usually harmless, everyone has ~4–5 million |
+| **Variant caller** | Software that reads the aligned reads and decides where, and in how many copies, a person differs from the reference (DeepVariant, bcftools, GATK) |
 | **VCF** | Variant Call Format: the standard variant file |
 | **VUS** | Variant of uncertain significance |
 | **WGS** | Whole-genome sequencing |

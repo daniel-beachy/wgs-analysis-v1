@@ -709,7 +709,8 @@ def blood_claims(rows: list[dict]) -> list[dict]:
 
 
 def panel_exons(st: Store) -> list[dict]:
-    """Exons of each ACMG SF gene's MANE Select transcript (else its longest protein-coding transcript, r87)."""
+    """Exons of each ACMG SF gene's MANE Select transcript (else the protein-coding transcript with most exons, r87;
+    ties go to the lowest transcript ID so the choice is the same on every run)."""
     import csv
 
     genes_t, mane_t = st.table("ensembl", "genes"), st.table("mane", "transcripts")
@@ -734,7 +735,7 @@ def panel_exons(st: Store) -> list[dict]:
     rows = con.execute(f"""WITH cand AS (
           SELECT g.symbol, tx.tx, count(*) AS n, bool_or(tx.tx IN ({mane})) AS is_mane
           FROM g JOIN tx USING (gene_id) JOIN ex USING (tx) GROUP BY ALL),
-        pick AS (SELECT symbol, arg_max(tx, is_mane::INT * 1000000 + n) AS tx, bool_or(is_mane) AS mane
+        pick AS (SELECT symbol, first(tx ORDER BY is_mane DESC, n DESC, tx) AS tx, bool_or(is_mane) AS mane
                  FROM cand GROUP BY 1)
         SELECT p.symbol, p.tx, p.mane, e.chrom, e.start, e."end", e.rank FROM pick p JOIN ex e USING (tx)
         ORDER BY p.symbol, e.start""").fetchall()

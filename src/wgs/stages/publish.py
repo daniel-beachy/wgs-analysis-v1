@@ -37,6 +37,7 @@ from ..pipeline import CANONICAL, Context, Stage, console, write_json
 from . import (
     ancestry,
     annotate,
+    benchmark,
     coverage,
     genotypes,
     pgs,
@@ -45,6 +46,7 @@ from . import (
     reads,
     recount,
     reference,
+    secondcall,
     special,
     traits,
     variants,
@@ -285,6 +287,15 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
     ("recount", "1", lambda c: [recount.out_sites(c)], _file_sql(recount.out_sites),
      "Read re-count: at every position a finding rests on, how many raw reads show each version, the genotype "
      "they fit, and whether it matches the call"),
+    ("second_caller", "1", lambda c: [secondcall.out_table(c)], _file_sql(secondcall.out_table),
+     "Second caller: variants bcftools found in your reads (ACMG exons and medicine positions) that the VCF lacks, "
+     "with what a re-count of the reads says, GIAB's hard-to-sequence reasons and any ClinVar record"),
+    ("benchmark_sites", "1", lambda c: [benchmark.out_sites(c)], _file_sql(benchmark.out_sites),
+     "Accuracy benchmark: the read re-count at GIAB HG002's true variants and at ClinVar variants HG002 lacks, with "
+     "the verdict for the right claim and for each wrong one (public reference data, not your genome)"),
+    ("benchmark_calls", "1", lambda c: [benchmark.out_calls(c)], _file_sql(benchmark.out_calls),
+     "Accuracy benchmark: bcftools' calls on GIAB's HG002 reads, each labelled right or wrong by RTG vcfeval "
+     "against HG002's truth (public reference data, not your genome)"),
     ("pgs_genotype_qc", "1", lambda c: [pgs.out_genotype_qc(c)], _file_sql(pgs.out_genotype_qc),
      "Polygenic scores: your genotype calls at scored sites vs how common each allele is (a calibration check)"),
 ]
@@ -306,6 +317,8 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "special": special.out_summary(ctx),
         "genome_stats": special.out_stats(ctx),
         "recount": recount.out_summary(ctx),
+        "benchmark": benchmark.out_summary(ctx),
+        "secondcall": secondcall.out_summary(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 

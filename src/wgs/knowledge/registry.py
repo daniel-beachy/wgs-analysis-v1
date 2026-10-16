@@ -6,6 +6,7 @@ from .clinvar import ClinVar
 from .curated import HPO, AcmgSF, Mondo, Orphanet
 from .ensembl import Ensembl, Mane
 from .genes import MedlinePlus, NcbiGene
+from .giab import Giab
 from .gwas import GwasCatalog, Sfari
 from .hla import ImgtHla
 from .pgs import PgsCatalog, PgsReference
@@ -17,4 +18,5 @@ from .strchive import Strchive
 SOURCES = [Ensembl(), Mane(), ClinVar(), ClinGen(), ThousandGenomes(), GnomAD(), HPO(), Mondo(), Orphanet(), AcmgSF(),
            GeneConstraint(), AlphaMissense(), Revel(),
            PharmCAT(), ImgtHla(), MedlinePlus(), NcbiGene(),
-           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari(), IgsrPopulations(), Strchive(), GnomadSV()]
+           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari(), IgsrPopulations(), Strchive(), GnomadSV(),
+           Giab()]

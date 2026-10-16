@@ -7,15 +7,12 @@
   const target = $derived(sectionFor(learn || t));
 </script>
 
-<span class="term" tabindex="0" role="button" aria-label={g ? `${g.term}: ${g.meaning}` : t}>
-  {label || t}
-  {#if g || target}
-    <span class="tip" role="tooltip">
+<!-- no whitespace around the label, so punctuation right after a term doesn't get a stray space -->
+<span class="term" tabindex="0" role="button" aria-label={g ? `${g.term}: ${g.meaning}` : t}>{label || t}{#if g || target}<span
+    class="tip" role="tooltip">
       {#if g}<strong>{g.term}</strong><span>{g.meaning}</span>{/if}
       {#if target}<button class="link" onclick={() => go('learn', target)}>Learn more →</button>{/if}
-    </span>
-  {/if}
-</span>
+    </span>{/if}</span>
 
 <style>
   .term { position: relative; border-bottom: 1px dotted var(--faint); cursor: help; }
