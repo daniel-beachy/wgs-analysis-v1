@@ -8,6 +8,7 @@
   import { sectionFor } from '../lib/learn';
   import Card from '../components/Card.svelte';
   import ClaimList from '../components/ClaimList.svelte';
+  import SpecialGenes from '../components/SpecialGenes.svelte';
   import Explain from '../components/Explain.svelte';
   import Term from '../components/Term.svelte';
 
@@ -70,6 +71,10 @@
 
   <Card title="Carrier findings" subtitle="One copy of a variant in a recessive gene. Click a row for the condition, who says so, and the reasons for each grade.">
     <ClaimList {m} section="carrier" onrows={(r) => (rows = r)} empty="No carrier findings: none of your variants is a known pathogenic variant in a recessive gene." />
+  </Card>
+
+  <Card title="Genes that need special tools" subtitle="Two common carrier genes have a near-identical twin elsewhere in the genome, so the standard VCF can’t read them. Specialised callers re-read them from your reads by counting copies and the few letters that tell the twins apart.">
+    <SpecialGenes {m} />
   </Card>
 </div>
 

@@ -340,45 +340,75 @@ def numbers_present(quote: str, text: str) -> list[str]:
     return [n for n in quote_numbers(quote) if n not in have]
 
 
-def check_curated(con, m: dict) -> list[dict]:
-    """Hand-curated baseline risks and per-SD effects: the source is live and still states the quoted numbers."""
+def curated_items() -> list[dict]:
+    """Every hand-curated, quoted row (baseline risks, per-SD effects, HLA associations) as {record, pmid, url,
+    quote, source}."""
     from . import absrisk
+    from .stages import special
 
     t = absrisk.table()
     out = []
     for kind in ("baseline", "per_sd"):
         for r in t.get(kind, []):
             rec = f"{kind}: {r.get('disease') or r.get('pgs_id')} ({r.get('sex', '')})".replace(" ()", "")
-            row = {"source": "curated", "record": rec, "url": r.get("url"), "stored": r.get("quote")}
-            text = ""
-            try:
-                if r.get("pmid"):
-                    text += _get(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="
-                                 f"{r['pmid']}&rettype=abstract&retmode=text").decode("utf-8", "replace")
-                if r.get("url"):
-                    try:
-                        text += _page_text(r["url"])
-                    except urllib.error.HTTPError as e:
-                        if not text:
-                            raise
-                        row["detail"] = f"page HTTP {e.code}; checked the PubMed abstract"
-            except urllib.error.HTTPError as e:
-                out.append({**row, "status": "blocked" if e.code in (401, 403, 429) else "broken",
-                            "live": f"HTTP {e.code}"})
-                continue
-            except Exception as e:  # noqa: BLE001
-                out.append({**row, "status": "broken", "live": type(e).__name__})
-                continue
-            missing = numbers_present(r.get("quote") or "", text)
-            for _ in range(3):  # some sites (PMC) intermittently serve a short stub page instead of the article
-                if not missing or not r.get("url"):
-                    break
-                time.sleep(3)
-                with contextlib.suppress(Exception):
-                    missing = numbers_present(r.get("quote") or "", text + _page_text(r["url"]))
-            out.append({**row, "status": "mismatch" if missing else "ok",
-                        "live": f"numbers not found on the page: {', '.join(missing)}" if missing else "quote found"})
-            time.sleep(0.34)
+            out.append({"record": rec, "pmid": r.get("pmid"), "url": r.get("url"), "quote": r.get("quote"),
+                        "source": r.get("source")})
+    out.extend({"record": f"hla: {a['id']}", "pmid": q.get("pmid"), "url": q.get("url"), "quote": q.get("quote"),
+                "source": q.get("source")}
+               for a in special.hla_table() for q in a.get("quotes", []) + a.get("caveats", []))
+    return out
+
+
+def first_author_matches(citation: str | None, summary: dict) -> bool:
+    """The citation text starts with PubMed's first-author surname (catches a mistyped or invented author)."""
+    authors = summary.get("authors") or []
+    if not citation or not authors:
+        return True
+    surname = authors[0].get("name", "").split(" ")[0].lower()
+    return citation.strip().lower().startswith(surname) if surname else True
+
+
+def check_curated(con, m: dict) -> list[dict]:
+    """Hand-curated rows: the source is live, still states the quoted numbers, and the cited first author is right."""
+    out = []
+    for r in curated_items():
+        row = {"source": "curated", "record": r["record"], "url": r.get("url"), "stored": r.get("quote")}
+        text = ""
+        try:
+            if r.get("pmid"):
+                text += _get(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="
+                             f"{r['pmid']}&rettype=abstract&retmode=text").decode("utf-8", "replace")
+                summ = json.loads(_get(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id="
+                                       f"{r['pmid']}&retmode=json"))["result"].get(str(r["pmid"]), {})
+                if not first_author_matches(r.get("source"), summ):
+                    out.append({**row, "status": "mismatch",
+                                "live": f"first author is {(summ.get('authors') or [{}])[0].get('name')}, "
+                                        f"not as cited ({r.get('source')})"})
+                    continue
+            if r.get("url"):
+                try:
+                    text += _page_text(r["url"])
+                except urllib.error.HTTPError as e:
+                    if not text:
+                        raise
+                    row["detail"] = f"page HTTP {e.code}; checked the PubMed abstract"
+        except urllib.error.HTTPError as e:
+            out.append({**row, "status": "blocked" if e.code in (401, 403, 429) else "broken",
+                        "live": f"HTTP {e.code}"})
+            continue
+        except Exception as e:  # noqa: BLE001
+            out.append({**row, "status": "broken", "live": type(e).__name__})
+            continue
+        missing = numbers_present(r.get("quote") or "", text)
+        for _ in range(3):  # some sites (PMC) intermittently serve a short stub page instead of the article
+            if not missing or not r.get("url"):
+                break
+            time.sleep(3)
+            with contextlib.suppress(Exception):
+                missing = numbers_present(r.get("quote") or "", text + _page_text(r["url"]))
+        out.append({**row, "status": "mismatch" if missing else "ok",
+                    "live": f"numbers not found on the page: {', '.join(missing)}" if missing else "quote found"})
+        time.sleep(0.34)
     return out
 
 

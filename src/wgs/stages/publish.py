@@ -34,7 +34,7 @@ from ..diff import diff, summarise
 from ..knowledge import Store
 from ..modules import evaluate
 from ..pipeline import CANONICAL, Context, Stage, console, write_json
-from . import ancestry, annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, traits, variants
+from . import ancestry, annotate, coverage, genotypes, pgs, pgx, qc, reads, reference, special, traits, variants
 
 SCHEMA = 1
 BIN_BP = 100_000
@@ -109,7 +109,8 @@ def _annotations_sql(ctx: Context) -> str:
 
 
 def _claims_in(ctx: Context) -> list[Path]:
-    paths = [p for p in (annotate.claims_path(ctx), pgx.out_paths(ctx)["claims"]) if p.exists()]
+    paths = [p for p in (annotate.claims_path(ctx), pgx.out_paths(ctx)["claims"], special.out_claims(ctx))
+             if p.exists()]
     return paths
 
 
@@ -237,6 +238,12 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Polygenic scores: every published evaluation of the selected scores (effect sizes, cohorts, ancestry)"),
     ("pgs_ancestry", "1", lambda c: [pgs.out_ancestry(c)], _file_sql(pgs.out_ancestry),
      "Genetic-ancestry PCA: you projected onto the 1000 Genomes reference panel, with population similarity"),
+    ("special_genes", "1", lambda c: [special.out_genes(c)], _file_sql(special.out_genes),
+     "Hard-to-read genes (SMN1, GBA1) re-read from the aligned reads by specialised callers, with grades"),
+    ("repeats", "1", lambda c: [special.out_repeats(c)], _file_sql(special.out_repeats),
+     "Repeat expansions: your repeat size at every STRchive disease locus vs its typical and disease ranges"),
+    ("hla_associations", "1", lambda c: [special.out_hla(c)], _file_sql(special.out_hla),
+     "HLA types with well-established disease associations: whether you carry them, with the quoted studies"),
     ("ancestry_components", "1", lambda c: [ancestry.out_components(c)], _file_sql(ancestry.out_components),
      "Ancestry: your share of each 1000 Genomes continental group, with its noise floor and grades"),
     ("ancestry_populations", "1", lambda c: [ancestry.out_populations(c)], _file_sql(ancestry.out_populations),
@@ -264,6 +271,7 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "traits": traits.out_summary(ctx),
         "pgs": pgs.out_summary(ctx),
         "ancestry": ancestry.out_summary(ctx),
+        "special": special.out_summary(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 

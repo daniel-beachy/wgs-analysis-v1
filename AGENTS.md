@@ -90,6 +90,9 @@ SELECT * FROM doc_changes;
 | `ancestry_populations` | one population in your main continental group | `neighbours` (of your 10 nearest reference people), `loo_recall` (how often the method places that population's own people back in it), `confused_with`, `in_nearest_group`, IGSR `description`/`url` |
 | `ancestry_pca` | one person (you = `you` true, plus 2,504 1000 Genomes people) | PCs 1–10 with super-population and population labels |
 | `haplogroups` | one lineage (`maternal` mtDNA / `paternal` Y) | `haplogroup`, `quality`, `call_level`, `tool`, `tree`, `path` (Y lineage, JSON), `found`/`missing` mutations, `url` (YFull branch) |
+| `special_genes` | one hard-to-read gene re-read by a specialised caller (SMN1, GBA1) | `status` (typical / carrier / not_determined / …), `statement`, `detail` (copy numbers), grades, `next_step` |
+| `repeats` | one STRchive repeat-expansion locus | `alleles` (ExpansionHunter count), `clinical_estimate`, `confidence_interval`, STRchive ranges, `status` (typical / intermediate / disease_range / not_readable / …), `vcf_agrees`, `sensitive` (adult-onset: ask before discussing) |
+| `hla_associations` | one curated HLA–disease association | `carried`, `notable`, `direction`, `statement`, `quotes` (exact sentences with PubMed links) |
 | `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.

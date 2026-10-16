@@ -9,6 +9,8 @@
   import Card from '../components/Card.svelte';
   import ClaimList from '../components/ClaimList.svelte';
   import PgsList from '../components/PgsList.svelte';
+  import Repeats from '../components/Repeats.svelte';
+  import HlaList from '../components/HlaList.svelte';
   import Explain from '../components/Explain.svelte';
   import Term from '../components/Term.svelte';
 
@@ -100,7 +102,7 @@
       {/if}
       <p class="legend small faint"><span class="gene demo">GENE</span> nothing found · <span class="gene demo note">GENE</span> listed variant, not reportable · <span class="gene demo flag">GENE</span> reportable · <span class="gene demo low">GENE</span> under 90% readable. Click a gene for details.</p>
       <Explain title="What “no findings” does and doesn’t mean">
-        <p>It means none of your small variants (single-letter changes and short insertions/deletions) in these genes is classified pathogenic in ClinVar in a way that meets the reporting rule. It does <em>not</em> rule out: larger deletions or duplications of whole exons, repeat expansions, variants in the few percent of each gene that couldn’t be read confidently, or variants not yet classified. A family history of one of these conditions matters more than this result — tell your doctor about it either way.</p>
+        <p>It means none of your small variants (single-letter changes and short insertions/deletions) in these genes is classified pathogenic in ClinVar in a way that meets the reporting rule. Repeat expansions are checked separately below. It does <em>not</em> rule out: larger deletions or duplications of whole exons, variants in the few percent of each gene that couldn’t be read confidently, or variants not yet classified. A family history of one of these conditions matters more than this result — tell your doctor about it either way.</p>
       </Explain>
     </Card>
   {/if}
@@ -130,7 +132,15 @@
     </Explain>
   </Card>
 
-  <Card title="6 · Polygenic risk scores" subtitle="Your percentile for common diseases and health measures, against the 1000 Genomes reference people most similar to you. Click a score for details.">
+  <Card title="6 · Repeat expansions" subtitle="Short stretches of DNA that repeat (CAG CAG CAG…) and cause disease when they grow past a threshold, such as Huntington’s disease or myotonic dystrophy. A standard VCF can’t size them, so they are re-read from your reads.">
+    <Repeats {m} />
+  </Card>
+
+  <Card title="7 · Immune-system (HLA) types" subtitle="Your HLA genes shape how the immune system recognises threats. A few versions are among the strongest genetic links known for some conditions, in both directions.">
+    <HlaList {m} />
+  </Card>
+
+  <Card title="8 · Polygenic risk scores" subtitle="Your percentile for common diseases and health measures, against the 1000 Genomes reference people most similar to you. Click a score for details.">
     <PgsList {m} section="health" {sex} empty="Polygenic scores were not computed for this release." />
     <p class="small faint">A percentile is a tendency, not a forecast: lifestyle, family history and chance usually matter as much or more. Brain-related scores are on the <button class="link inline" onclick={() => go('brain')}>Brain &amp; mind</button> page.</p>
   </Card>

@@ -47,7 +47,8 @@ CHECKS: list[Check] = [
           ("claims",),
           """SELECT claim_id FROM claims WHERE NOT list_bool_or(list_transform(
                coalesce(json_extract_string(sources, '$[*].url'), []),
-               u -> coalesce(regexp_matches(u, '://[^/]+/[^?#]*[^/?#]/[^/?#]+|[?][^#]*='), false)))"""),
+               u -> coalesce(regexp_matches(u, '://[^/]+/[^?#]*[^/?#]/[^/?#]+|[?][^#]*='
+                                                   || '|pubmed[.]ncbi[.]nlm[.]nih[.]gov/[0-9]+'), false)))"""),
     Check("claims.ba1_role", "Common variants never get a carrier or affected label",
           "An allele carried by 5% or more of a population can't cause a rare disease on its own (ACMG/AMP BA1); "
           "only expert-panel (3★+) ClinVar records, which already weighed frequency, are exempt.", ("claims",),
@@ -193,6 +194,29 @@ CHECKS: list[Check] = [
           ("haplogroups",),
           """SELECT line FROM haplogroups WHERE regexp_matches(coalesce(found, '') || coalesce(missing, '')
              || coalesce(extra, ''), '"(nan|none|null)"', 'i')"""),
+    Check("special.genes_sourced", "Every hard-to-read gene result names its tool, grades and sources",
+          "SMN1 and GBA1 are re-read by specialised callers; each result must say which and how sure.",
+          ("special_genes",),
+          """SELECT gene FROM special_genes WHERE tool IS NULL OR sources IS NULL OR sources IN ('', '[]')
+             OR call_level IS NULL OR overall IS NULL"""),
+    Check("special.undetermined_not_reassuring", "An undetermined result is never shown as typical",
+          "When a caller can't decide (e.g. SMN1 copy number between 1 and 2), the page must say 'not determined' "
+          "and grade it Not callable, never fall back to 'not a carrier'.", ("special_genes",),
+          """SELECT gene FROM special_genes WHERE (status = 'not_determined') <> (call_level = 'Not callable')"""),
+    Check("repeats.unreadable_not_typical", "Repeats that couldn't be read are never called typical",
+          "No reads across a repeat (e.g. FMR1, which is very GC-rich) means unknown, not normal.", ("repeats",),
+          """SELECT locus_id FROM repeats WHERE (status = 'not_readable') <> (call_level = 'Not callable')
+             OR (status = 'typical' AND (alleles IS NULL OR alleles = ''))"""),
+    Check("repeats.out_of_range_is_a_claim", "Every repeat outside the typical range is also a graded finding",
+          "A repeat in the intermediate or disease range must appear on the Health or Carrier page, not only in "
+          "the table.", ("repeats", "claims"),
+          """SELECT r.locus_id FROM repeats r WHERE r.status IN ('intermediate', 'disease_range')
+             AND NOT EXISTS (SELECT 1 FROM claims c WHERE c.claim_id = 'special:repeat:' || r.locus_id)"""),
+    Check("hla.quoted", "Every HLA association quotes its source", "The HLA statements are only as good as the "
+          "quoted study; each must carry at least one quote with a PubMed link (ADR-021).", ("hla_associations",),
+          """SELECT association_id FROM hla_associations WHERE coalesce(json_array_length(quotes), 0) = 0
+             OR NOT list_bool_and(list_transform(CAST(json_extract(quotes, '$[*].url') AS VARCHAR[]),
+                                                 u -> regexp_matches(u, 'pubmed[.]ncbi[.]nlm[.]nih[.]gov/[0-9]+')))"""),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

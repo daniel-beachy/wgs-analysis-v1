@@ -75,11 +75,29 @@ numpy = ">=1.26"
 [feature.haplo.pypi-dependencies]
 yleaf = { git = "https://github.com/genid/Yleaf", tag = "v4.1.5" }
 
+# Specialised callers (ADR-021): genes with near-identical copies (SMN1/SMN2, GBA1), repeat expansions and
+# structural variants, read from the CRAM. Illumina moved its callers to the PolyForm Strict licence in Dec 2022;
+# the versions pinned here (and Cyrius 1.1.1 above) were released earlier under Apache-2.0 / GPL-3.0.
+[feature.special.dependencies]
+python = "3.11.*"
+smncopynumbercaller = "==1.1.2"
+expansionhunter = "==5.0.0"
+delly = ">=1.2"
+samtools = ">=1.21"
+pysam = ">=0.22"
+numpy = ">=1.26,<2"
+scipy = ">=1.11"
+statsmodels = ">=0.14"
+
+[feature.special.pypi-dependencies]
+gauchian = { git = "https://github.com/Illumina/Gauchian", tag = "v1.0.2" }
+
 [environments]
 cyrius = { features = ["cyrius"], no-default-feature = true }
 pgs = { features = ["pgs"], no-default-feature = true }
 fraposa = { features = ["fraposa"], no-default-feature = true }
 haplo = { features = ["haplo"], no-default-feature = true }
+special = { features = ["special"], no-default-feature = true }
 
 [tasks]
 wgs = "python -m wgs"

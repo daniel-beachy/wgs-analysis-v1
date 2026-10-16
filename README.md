@@ -101,6 +101,7 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [PGS Catalog](https://www.pgscatalog.org/) | Polygenic scores, their publications and independent evaluations | EMBL-EBI open data; per-score licence recorded |
 | [1000 Genomes reference panel](https://ftp.ebi.ac.uk/pub/databases/spot/pgs/resources/) (PGS Catalog build) | Ancestry-matched percentiles for polygenic scores (≈ 7 GB download) | Open access |
 | [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
+| [STRchive](https://strchive.org) | Repeat-expansion disease loci: typical and disease ranges, evidence, references | MIT |
 | [IGSR populations](https://www.internationalgenome.org/data-portal/population) | Names and sampling locations of the 26 1000 Genomes populations (Ancestry tab) | Free to use without restriction |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
@@ -139,6 +140,10 @@ Each dashboard section declares the inputs it **requires** and the inputs that *
 ### Traits, polygenic scores and Brain & mind
 
 `traits` (seconds) reads featured single-variant traits and rare variants in SFARI genes. `pgs` computes polygenic score percentiles the way the PGS Catalog's pgsc_calc does, with `pgscatalog-utils` and `plink2` from a separate environment (`pixi install -e pgs`, macOS and Linux). It needs the `pgs_catalog` and `pgs_reference` knowledge sources. The first run takes 2–3 hours on a 16 GB laptop (reference QC, score normalising and reference-panel scores are cached afterwards, so re-runs take minutes) and needs about 10 GB of temporary space on the internal disk. Without the `pgs` environment the Traits page still shows the single-variant traits. Design: [ADR-017](docs/DECISIONS.md).
+
+### Hard-to-read genes, repeat expansions and HLA
+
+`special` (about 2 minutes) re-reads what a VCF can't show from the CRAM: *SMN1*/*SMN2* copy number (SMNCopyNumberCaller), *GBA1* (Gauchian), repeat-expansion disease loci (ExpansionHunter against STRchive's ranges) and HLA disease associations (T1K types against a quoted, curated table). The tools live in their own environment: `pixi install -e special`. Illumina's callers are pinned to their last Apache-2.0 releases (see ADR-021). Needs the `strchive` knowledge source. Design: [ADR-021](docs/DECISIONS.md).
 
 ### Ancestry and haplogroups
 

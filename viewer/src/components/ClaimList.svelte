@@ -84,7 +84,7 @@
             <tr class="masked"><td colspan="6"><button class="link" onclick={() => reveal(r)}>🔒 Sensitive finding — click to reveal</button></td></tr>
           {:else}
             <tr class:open={open === r.claim_id} onclick={() => (open = open === r.claim_id ? null : r.claim_id)}>
-              <td><strong>{r.gene ?? r.subject}</strong><div class="mono faint">{r.rsid ?? `${r.chrom}:${r.pos}`}</div></td>
+              <td><strong>{r.gene ?? r.subject}</strong><div class="mono faint">{r.rsid ?? (r.chrom ? `${r.chrom}:${r.pos}` : r.subject !== r.gene ? r.subject : r.kind)}</div></td>
               <td><span class="pill {CLASS_PILL[r.category] ?? ''}">{r.category_label}</span>{#if r.category !== 'predicted'} <span class="stars" title={STAR_WORD[r.clinvar_stars]}>{stars(r.clinvar_stars)}</span>{/if}
                 {#if r.acmg_sf}<span class="pill acmg" title="On the ACMG secondary-findings list: genes where a finding is medically actionable">ACMG SF</span>{/if}
                 <div class="cond">{r.conditions || '—'}</div></td>
@@ -146,11 +146,11 @@
                 <div class="grid cols-3">
                   <div><div class="faint">Why this evidence grade</div><ul>{#each r.evidence_reasons ?? [] as x}<li>{x}</li>{/each}</ul></div>
                   <div><div class="faint">Why this call confidence</div><ul>{#each r.call_reasons ?? [] as x}<li>{x}</li>{/each}</ul></div>
-                  <div><div class="faint">About the variant</div><ul>
+                  {#if r.chrom}<div><div class="faint">About the variant</div><ul>
                     <li>{consequenceLabel(r.consequence)}{r.aa_change ? ` (${aaShort(r.aa_change)})` : ''}{r.impact ? ` · ${r.impact.toLowerCase()} impact` : ''}{r.transcript ? ` · on ${r.refseq ?? r.transcript} (${r.transcript_basis ?? 'transcript'})` : ''}</li>
                     {#if r.inheritance}<li>Inheritance: {r.inheritance.split('/').map((x: string) => INH[x] ?? x).join(', ')}{r.inheritance_basis === 'gene' ? ' (from the gene’s known diseases)' : ''}{r.gene_validity ? ` · gene–disease link: ${r.gene_validity}` : ''}</li>{/if}
                     <li>Frequency: {r.af_1kg != null ? `${pct(r.af_1kg)} of chromosomes (1000 Genomes)` : 'not in 1000 Genomes'}{r.gnomad_popmax_af != null ? ` · up to ${pct(r.gnomad_popmax_af)} in a gnomAD population` : ''}</li>
-                  </ul></div>
+                  </ul></div>{/if}
                 </div>
                 {#if json(r.submitters).length}
                   {@const subs = json(r.submitters)}
@@ -165,10 +165,10 @@
                 <div class="row">
                   <span class="faint">Sources:</span>
                   {#each parseSources(r) as s}
-                    {#if s.url}<a href={s.url} target="_blank" rel="noreferrer">{s.source} {s.version}</a>{:else}<span>{s.source} {s.version}</span>{/if}
+                    {#if s.url}<a href={s.url} target="_blank" rel="noreferrer">{s.source} {s.version ?? ''}</a>{:else}<span>{s.source} {s.version ?? ''}</span>{/if}
                   {/each}
                   <span class="spacer"></span>
-                  <button onclick={() => go('variants', r.rsid ?? `${r.chrom}:${r.pos}`)}>🔎 Open in variant explorer</button>
+                  {#if r.chrom}<button onclick={() => go('variants', r.rsid ?? `${r.chrom}:${r.pos}`)}>🔎 Open in variant explorer</button>{/if}
                 </div>
               </td></tr>
             {/if}

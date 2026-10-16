@@ -14,10 +14,13 @@ Each step ends with a **checkpoint** where Daniel tries the result before we mov
 | 6b | Verification audit: exact source per finding, `wgs audit` live re-checks, ACMG BA1, absolute risk ("X in 100 vs Y typical") from AUROC or cited per-SD effects and a quoted baseline table, ClinGen penetrance bands (ADR-018) | Audit clean ✅ built |
 | 7 | ✅ Ancestry and haplogroups (ADR-020): continental shares with leave-one-out noise floors, nearest 1000 Genomes population with its confusion rate, mtDNA (haplogrep3) and Y (Yleaf) haplogroups, PCA plots. Finer regions (HGDP + 1000 Genomes) are a later, separate step | Section review |
 | 7b | ✅ Score spread per trait (ADR-019): every computed score is shown; headline = median across studies, range band, agreement label, risk from the most-tested score. Still open: scoring *all* catalog scores per trait, the selection-rule change and an R²-above-heritability flag (need a new scoring run) | Review spreads on Brain & Health |
-| 8 | "You vs the average human" body-map infographic | Visual review |
-| 9 | GIAB HG002 benchmark and demo mode | Accuracy numbers |
+| 8 | The hidden genome: what the standard VCF can't show, read from the CRAM with specialised tools. Genes with near-identical twins (*SMN1*/*SMN2* spinal muscular atrophy carrier status, *GBA1*), repeat expansions (ExpansionHunter + a sourced catalogue of disease thresholds), deletions and duplications in medically important genes, HLA disease associations (e.g. coeliac DQ2/DQ8), blood group (ABO and RhD) and "how your genome compares" counts (variants, protein-truncating variants) against published figures. Results join the existing sections as graded, sourced findings | Section review |
+| 9 | Accuracy: re-count the reads in the CRAM for every important finding (independent check of the genotype call); GIAB HG002 truth set run through the interpretation pipeline (demo mode), compared with `rtg vcfeval` | Accuracy numbers |
 | 10 | End-to-end refresh: "What changed" | Simulated knowledge update |
-| 11 | Documentation, Windows test, polish; AI helpers: a local read-only MCP server (`wgs mcp`) and an "Ask AI" button that copies a claim plus its evidence as a prompt | Final sign-off |
+| 11 | Highlights (replaces the body-map idea, see below): every notable way your genome differs, Strong to Limited, each with its grade and source; plus "Claude's take", an AI-written personal summary that may only cite findings in the release (checked automatically) and is labelled as opinion | Visual review |
+| 12 | Documentation, Windows test, polish; AI helpers: a local read-only MCP server (`wgs mcp`) and an "Ask AI" button that copies a claim plus its evidence as a prompt | Final sign-off |
+
+*Body map (2026-10-16):* dropped in favour of Highlights. Pinning polygenic percentiles to organs would put the least reliable results in the most prominent place and make them look medical; a page ranked by strength of evidence serves the same "you vs the average human" goal honestly.
 
 ## Future options (not scheduled)
 

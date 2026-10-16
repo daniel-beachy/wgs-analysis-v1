@@ -1,0 +1,71 @@
+# HLA types with well-established disease associations (ADR-021).
+#
+# Same policy as baseline_risk.toml (ADR-018): every row cites a PubMed record and quotes, word for word, the
+# sentence that supports it; `wgs audit --only curated` re-checks that each quote's numbers still appear in the
+# source. Rows are matched against the HLA types T1K calls from your reads (two-field resolution, e.g. DQB1*06:02).
+# Statements on the dashboard are built from these fields by rule; nothing here is free text about you.
+#
+# kind:
+#   risk        carrying any listed allele is linked to higher risk
+#   protective  carrying any listed allele is linked to lower risk
+#   rule_out    carrying none of the listed alleles makes the condition very unlikely
+#   haplotype   all listed alleles together form the haplotype the quote describes
+# Allele prefixes match at the field boundary: "DQB1*02" matches DQB1*02:01 and DQB1*02:02.
+
+[[association]]
+id = "coeliac_dq2_dq8"
+condition = "Coeliac disease"
+kind = "rule_out"
+alleles = ["DQB1*02", "DQB1*03:02"]
+markers = "HLA-DQ2 (DQB1*02) or HLA-DQ8 (DQB1*03:02)"
+quotes = [
+  { source = "Megiorni F, Pizzuti A. J Biomed Sci. 2012", pmid = "23050549", url = "https://pubmed.ncbi.nlm.nih.gov/23050549/", quote = "About 90-95% of CD patients carry DQ2.5 heterodimers, encoded by DQA1*05 and DQB1*02 alleles both in cis or in trans configuration, and DQ8 molecules, encoded by DQB1*03:02 generally in combination with DQA1*03 variant." },
+  { source = "Rouvroye MD, et al. Hum Immunol. 2024", pmid = "39423728", url = "https://pubmed.ncbi.nlm.nih.gov/39423728/", quote = "Testing negative for HLA-DQ2/DQ8 has a high negative predictive value." },
+]
+# Shown only when you carry HLA-DQ7 (DQB1*03:01), the type the second study looked at.
+caveats = [
+  { if_present = ["DQB1*03:01"], source = "Rouvroye MD, et al. Hum Immunol. 2024", pmid = "39423728", url = "https://pubmed.ncbi.nlm.nih.gov/39423728/", quote = "In total, 489/3983 patients were HLA-DQ7-positive and HLA-DQ2/DQ8 negative, and after exclusion (missing data on diet or serology/histology), 325 were included. Only one adult patient was diagnosed with CD, based on a duodenal biopsy and a clinical response to a gluten-free diet." },
+]
+
+[[association]]
+id = "t1d_dr15_dq6"
+condition = "Type 1 diabetes"
+kind = "haplotype"
+direction = "protective"
+alleles = ["DRB1*15:01", "DQA1*01:02", "DQB1*06:02"]
+markers = "the DR15-DQ6 haplotype (DRB1*15:01, DQA1*01:02, DQB1*06:02)"
+quotes = [
+  { source = "Erlich H, et al. Diabetes. 2008", pmid = "18252895", url = "https://pubmed.ncbi.nlm.nih.gov/18252895/", quote = "The most protective haplotypes are DRB1*1501-DQA1*0102-DQB1*0602 (OR 0.03), DRB1*1401-DQA1*0101-DQB1*0503 (OR 0.02), and DRB1*0701-DQA1*0201-DQB1*0303 (OR 0.02)." },
+]
+
+[[association]]
+id = "narcolepsy_dqb1_0602"
+condition = "Narcolepsy with cataplexy (type 1)"
+kind = "risk"
+alleles = ["DQB1*06:02"]
+markers = "HLA-DQB1*06:02"
+quotes = [
+  { source = "Tafti M, et al. Sleep. 2014", pmid = "24381371", url = "https://pubmed.ncbi.nlm.nih.gov/24381371/", quote = "DQB1 typing confirmed that DQB1*06:02 confers an extraordinary risk (odds ratio 251)." },
+  { source = "Kallweit U, et al. J Clin Sleep Med. 2022 (Germany)", pmid = "35088707", url = "https://pubmed.ncbi.nlm.nih.gov/35088707/", quote = "In 2018, diagnostic prevalence was estimated as 17.88 (95% confidence interval 16.45-19.40) and 12-month incidence as 0.79 (0.52-1.15) per 100,000 persons." },
+]
+
+[[association]]
+id = "ms_class2_risk"
+condition = "Multiple sclerosis"
+kind = "risk"
+alleles = ["DRB1*15:01", "DRB1*13:03", "DRB1*03:01", "DRB1*08:01", "DQB1*03:02"]
+markers = "the class II risk alleles DRB1*15:01, DRB1*13:03, DRB1*03:01, DRB1*08:01 and DQB1*03:02"
+quotes = [
+  { source = "Moutsianas L, et al. Nat Genet. 2015", pmid = "26343388", url = "https://pubmed.ncbi.nlm.nih.gov/26343388/", quote = "Among new and previously identified class II risk alleles (HLA-DRB1*15:01, HLA-DRB1*13:03, HLA-DRB1*03:01, HLA-DRB1*08:01 and HLA-DQB1*03:02) and class I protective alleles (HLA-A*02:01, HLA-B*44:02, HLA-B*38:01 and HLA-B*55:01), we find evidence for two interactions involving pairs of class II alleles: HLA-DQA1*01:01-HLA-DRB1*15:01 and HLA-DQB1*03:01-HLA-DQB1*03:02." },
+  { source = "Patsopoulos NA, et al. PLoS Genet. 2013", pmid = "24278027", url = "https://pubmed.ncbi.nlm.nih.gov/24278027/", quote = "HLA-DRB1*15:01 has the strongest effect, and several other alleles have been reported at different levels of validation." },
+]
+
+[[association]]
+id = "ms_class1_protective"
+condition = "Multiple sclerosis"
+kind = "protective"
+alleles = ["A*02:01", "B*44:02", "B*38:01", "B*55:01"]
+markers = "the class I protective alleles A*02:01, B*44:02, B*38:01 and B*55:01"
+quotes = [
+  { source = "Moutsianas L, et al. Nat Genet. 2015", pmid = "26343388", url = "https://pubmed.ncbi.nlm.nih.gov/26343388/", quote = "Among new and previously identified class II risk alleles (HLA-DRB1*15:01, HLA-DRB1*13:03, HLA-DRB1*03:01, HLA-DRB1*08:01 and HLA-DQB1*03:02) and class I protective alleles (HLA-A*02:01, HLA-B*44:02, HLA-B*38:01 and HLA-B*55:01), we find evidence for two interactions involving pairs of class II alleles: HLA-DQA1*01:01-HLA-DRB1*15:01 and HLA-DQB1*03:01-HLA-DQB1*03:02." },
+]
