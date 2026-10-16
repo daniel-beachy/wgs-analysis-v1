@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import statistics
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -48,6 +49,9 @@ REF_SCORE_VERSION = "1"  # bump if the reference scoring command changes
 NEAR_PAD = 25  # bp: how far apart two spellings of the same indel can sit in short repeats
 MATCH_BATCH_BYTES = 400_000_000  # compressed scoring-file bytes per pgscatalog-match call (~8 GB of RAM)
 AUTOSOMES = [str(i) for i in range(1, 23)]
+# ADR-019: two studies "agree" when they place you within one standard deviation of each other (≈ the gap between
+# the 50th and 84th percentile).
+AGREE_SPREAD_SD = 1.0
 REF_QC = ["--max-alleles", "2", "--snps-only", "just-acgt", "--geno", "0.1",
           "--mind", "0.1", "--maf", "0.05", "--hwe", "1e-4", "--autosome"]
 
@@ -77,6 +81,10 @@ def out_ancestry(ctx: Context) -> Path:
 
 def out_genotype_qc(ctx: Context) -> Path:
     return pgs_dir(ctx) / "genotype_qc.parquet"
+
+
+def out_traits(ctx: Context) -> Path:
+    return pgs_dir(ctx) / "traits.parquet"
 
 
 def _tool(name: str) -> str | None:
@@ -513,31 +521,75 @@ def effect_text(e: dict | None) -> str | None:
     return "; ".join(parts) or e.get("other")
 
 
-def promote(sel: list[dict], scored: dict[str, dict]) -> list[dict]:
-    """For each featured trait, show the best-ranked score that could actually be scored on your data.
+def _risk_status(r: dict) -> str | None:
+    return json.loads(r["abs_risk"]).get("status") if r.get("abs_risk") else None
 
-    If the selection rule's pick failed (too few variants matched), the first scorable stand-in takes its place
-    and the pick moves to the browse list with its reason; stand-ins that aren't needed are dropped."""
-    def ok(r: dict) -> bool:
-        you = scored.get(r["pgs_id"]) or {}
-        return bool(you.get("passed")) and you.get("percentile") is not None
 
-    alts: dict[str, list[dict]] = {}
-    for r in sel:
-        if r.get("alternate_for"):
-            alts.setdefault(r["alternate_for"], []).append(r)
+def _tested(r: dict) -> tuple:
+    """How well tested a score is, in the selection rule's order (ADR-017)."""
+    return (r.get("independent_pubs") or 0, r.get("independent_n") or 0, r.get("evaluated_n") or 0)
+
+
+def agreement(z: list[float], n_studies: int) -> tuple[str, str]:
+    """Do a trait's scores agree on where you sit? Every computed score counts here, so two methods from one paper
+    that disagree are not hidden by the per-study median (ADR-019)."""
+    if not z:
+        return "none", "No score for this trait could be computed on your data"
+    if len(z) == 1:
+        return "single", "Only one score could be computed, so there is no second opinion"
+    lo, hi, n = min(z), max(z), len(z)
+    same = (f"; all {n} come from one study, so this is not an independent confirmation" if n_studies == 1
+            else f"; they come from {n_studies} studies" if n_studies < n else "")
+    if hi - lo <= AGREE_SPREAD_SD:
+        return "consistent", f"The {n} scores agree: they place you within one standard deviation of each other{same}"
+    if lo > 0 or hi < 0:
+        side = "above" if lo > 0 else "below"
+        return "same_direction", (f"The {n} scores agree you are {side} average but not by how much: they differ by "
+                                  f"{hi - lo:.1f} standard deviations{same}")
+    return "disagree", (f"The {n} scores disagree: they differ by {hi - lo:.1f} standard deviations and do not all "
+                        f"place you on the same side of average{same}")
+
+
+def summarise(rows: list[dict]) -> list[dict]:
+    """One row per trait from all of its scores (ADR-019).
+
+    Headline = median over studies of each study's median percentile, so several scores from one paper count once.
+    The range is every computed score's percentile. Absolute risk comes from the most-tested score that has one,
+    and names it."""
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(r["trait_group"], []).append(r)
     out = []
-    for r in sel:
-        if r.get("alternate_for"):
-            continue
-        sub = next((a for a in alts.get(r["trait_id"], []) if ok(a)), None) if r["featured"] and not ok(r) else None
-        if sub:
-            out.append({**sub, "featured": True, "alternate_for": "",
-                        "why": f"Stands in for {r['pgs_id']}, the selection rule's pick, which could not be scored "
-                               "on your data"})
-            out.append({**r, "featured": False, "section": "", "why": f"Replaced by {sub['pgs_id']}"})
-        else:
-            out.append(r)
+    for t, rs in groups.items():
+        head = next((r for r in rs if r["featured"]), rs[0])
+        ok = [r for r in rs if r.get("passed") and r.get("percentile") is not None and r.get("z") is not None]
+        papers: dict[str, list[dict]] = {}
+        for r in ok:
+            papers.setdefault(r.get("pgp_id") or r["pgs_id"], []).append(r)
+        studies = [{"pgp_id": k, "first_author": v[0].get("first_author"), "published": v[0].get("published"),
+                    "pgs_ids": [r["pgs_id"] for r in v], "percentile": statistics.median(r["percentile"] for r in v),
+                    "z": statistics.median(r["z"] for r in v)} for k, v in papers.items()]
+        studies.sort(key=lambda x: x["percentile"])
+        kind, text = agreement([r["z"] for r in ok], len(studies))
+        tested = sorted(ok, key=_tested, reverse=True)
+        best = tested[0] if tested else None
+        risk = next((r for r in tested if _risk_status(r) == "ok"), best)
+        out.append({
+            "trait_id": t, **{k: head.get(k) for k in ("label", "trait_label", "section", "body_system", "sex",
+                                                       "trait_description", "trait_url")},
+            "featured": any(r["featured"] for r in rs), "n_scores": len(rs), "n_scored": len(ok),
+            "n_studies": len(studies),
+            "percentile": statistics.median(x["percentile"] for x in studies) if studies else None,
+            "z": statistics.median(x["z"] for x in studies) if studies else None,
+            "low": min((r["percentile"] for r in ok), default=None),
+            "high": max((r["percentile"] for r in ok), default=None),
+            "compared_with": best and best.get("compared_with"),
+            "studies": json.dumps(studies), "agreement": kind, "agreement_text": text,
+            "best_pgs_id": best and best["pgs_id"],
+            **{k: best and best.get(k) for k in ("evidence_level", "call_confidence", "overall")},
+            "risk_pgs_id": risk["pgs_id"] if risk and risk.get("abs_risk") else None,
+            "abs_risk": risk.get("abs_risk") if risk else None,
+        })
     return out
 
 
@@ -556,8 +608,8 @@ def abs_risk(r: dict, you: dict, evals: list[dict], sex: str | None) -> dict | N
 def grade(sel: list[dict], scored: dict[str, dict], root: Path, sex: str | None = None) -> list[dict]:
     """One row per selected score: your result, catalog metadata, best evaluation and the Model 3 grades."""
     con = duckdb.connect()
-    meta = {r["pgs_id"]: r for r in _clean(con.execute(f"""SELECT s.pgs_id, s.name, s.trait_reported, s.method,
-        s.ancestry_gwas, s.ancestry_training, s.ancestry_evaluation, s.released, s.licence, s.pmid, s.doi,
+    meta = {r["pgs_id"]: r for r in _clean(con.execute(f"""SELECT s.pgs_id, s.pgp_id, s.name, s.trait_reported,
+        s.method, s.ancestry_gwas, s.ancestry_training, s.ancestry_evaluation, s.released, s.licence, s.pmid, s.doi,
         p.first_author, p.title, p.journal, p.published FROM '{root / "scores.parquet"}' s
         LEFT JOIN '{root / "publications.parquet"}' p USING (pgp_id)""").fetchdf().to_dict("records"))}
     about = {r["trait_id"]: r for r in _clean(con.execute(f"""SELECT trait_id, description AS trait_description,
@@ -570,9 +622,11 @@ def grade(sel: list[dict], scored: dict[str, dict], root: Path, sex: str | None 
             p.pmid AS eval_pmid FROM '{root / "evaluations.parquet"}' e
             LEFT JOIN '{root / "publications.parquet"}' p USING (pgp_id)""").fetchdf().to_dict("records")):
         evals.setdefault(e["pgs_id"], []).append(e)
-    out = []
+    out, rank = [], {}
     for r in sel:
         pid = r["pgs_id"]
+        group = r.get("alternate_for") or r["trait_id"]
+        rank[group] = rank.get(group, 0) + 1
         you = scored.get(pid, {})
         m = meta.get(pid, {})
         b = best_evaluation(evals.get(pid, []))
@@ -585,9 +639,10 @@ def grade(sel: list[dict], scored: dict[str, dict], root: Path, sex: str | None 
             **{k: r[k] for k in ("pgs_id", "trait_id", "trait_label", "label", "section", "body_system", "sex",
                                  "featured", "pinned", "why", "independent_pubs", "independent_n", "evaluated_n",
                                  "n_variants")},
+            "trait_group": group, "alternate_for": r.get("alternate_for") or "", "rank_in_trait": rank[group],
             **{k: you.get(k) for k in ("raw_score", "percentile", "z", "z_norm1", "z_norm2", "compared_with",
                                        "matched", "total", "match_rate", "passed")},
-            **{k: m.get(k) for k in ("name", "trait_reported", "method", "ancestry_gwas", "ancestry_training",
+            **{k: m.get(k) for k in ("pgp_id", "name", "trait_reported", "method", "ancestry_gwas", "ancestry_training",
                                      "ancestry_evaluation", "released", "licence", "pmid", "doi", "first_author",
                                      "title", "journal", "published")},
             **{k: about.get(r["trait_id"], {}).get(k) for k in ("trait_description", "trait_url")},
@@ -637,7 +692,9 @@ def _collect(ctx: Context, d: Path, sel: list[dict], stats: dict, version: str, 
         FROM sel LEFT JOIN s ON split_part(s.PGS, '_', 1) = sel.pgs_id
         LEFT JOIN m ON m.pgs_id = sel.pgs_id""").fetchdf()
     scored = {r["pgs_id"]: r for r in _clean(rows.to_dict("records"))}
-    pq.write_table(pa.Table.from_pylist(grade(promote(sel, scored), scored, catalog_root, _sex(ctx))), out_scores(ctx))
+    graded = grade(sel, scored, catalog_root, _sex(ctx))
+    pq.write_table(pa.Table.from_pylist(graded), out_scores(ctx))
+    pq.write_table(pa.Table.from_pylist(summarise(graded)), out_traits(ctx))
     con.execute(f"""COPY (SELECT * FROM read_csv('{pop}', delim='\t', header=true))
         TO '{out_ancestry(ctx)}' (FORMAT parquet)""")
     me = con.execute(f"""SELECT * FROM read_csv('{pop}', delim='\t', header=true)
@@ -717,8 +774,8 @@ def _params(ctx: Context) -> dict:
 
 
 STAGE = Stage(
-    name="pgs", version="3", title="Polygenic scores (PGS Catalog + 1000 Genomes)", fn=_pgs, inputs=_inputs,
-    outputs=lambda ctx: [out_scores(ctx), out_summary(ctx), out_ancestry(ctx), out_genotype_qc(ctx)],
+    name="pgs", version="4", title="Polygenic scores (PGS Catalog + 1000 Genomes)", fn=_pgs, inputs=_inputs,
+    outputs=lambda ctx: [out_scores(ctx), out_traits(ctx), out_summary(ctx), out_ancestry(ctx), out_genotype_qc(ctx)],
     available=_available,
     params=_params,
 )

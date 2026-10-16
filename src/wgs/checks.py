@@ -139,9 +139,38 @@ CHECKS: list[Check] = [
     Check("pgs.percentile_range", "Every percentile lies between 0 and 100",
           "A percentile outside 0–100 means the adjustment step misread its input.", ("pgs_scores",),
           "SELECT pgs_id FROM pgs_scores WHERE percentile IS NOT NULL AND (percentile < 0 OR percentile > 100)"),
-    Check("pgs.featured_scored", "Every featured polygenic score produced a percentile",
-          "A featured trait shown without a result would be a silent gap.", ("pgs_scores",),
-          "SELECT pgs_id || ' ' || label FROM pgs_scores WHERE featured AND percentile IS NULL"),
+    Check("pgs.featured_scored", "Every featured trait has a result from at least one score",
+          "A featured trait shown without a result would be a silent gap.", ("pgs_traits",),
+          "SELECT trait_id || ' ' || label FROM pgs_traits WHERE featured AND percentile IS NULL"),
+    Check("pgs.trait_headline", "Each trait's headline is the median across studies of its scores",
+          "Recomputed from the score rows, so the headline can't drift from the scores shown beneath it, and several "
+          "scores from one paper count as one study (ADR-019).", ("pgs_scores", "pgs_traits"),
+          """WITH ok AS (SELECT * FROM pgs_scores WHERE passed AND percentile IS NOT NULL AND z IS NOT NULL),
+               s AS (SELECT trait_group, coalesce(pgp_id, pgs_id) AS study, median(percentile) AS p
+                     FROM ok GROUP BY ALL),
+               t AS (SELECT trait_group, median(p) AS p, count(*) AS n FROM s GROUP BY ALL),
+               r AS (SELECT trait_group, min(percentile) AS lo, max(percentile) AS hi, count(*) AS n
+                     FROM ok GROUP BY ALL)
+             SELECT x.trait_id FROM pgs_traits x LEFT JOIN t ON t.trait_group = x.trait_id
+               LEFT JOIN r ON r.trait_group = x.trait_id
+             WHERE abs(coalesce(x.percentile, -1) - coalesce(t.p, -1)) > 1e-9 OR x.n_studies <> coalesce(t.n, 0)
+                OR x.n_scored <> coalesce(r.n, 0) OR abs(coalesce(x.low, -1) - coalesce(r.lo, -1)) > 1e-9
+                OR abs(coalesce(x.high, -1) - coalesce(r.hi, -1)) > 1e-9
+                OR x.percentile NOT BETWEEN x.low AND x.high"""),
+    Check("pgs.trait_risk_named",
+          "A trait's risk in numbers comes from the most-tested score that has one, and names it",
+          "The absolute risk uses one score's published effect, so it must say which; picking any other score "
+          "would let a weakly tested outlier set the number (ADR-019).", ("pgs_scores", "pgs_traits"),
+          """WITH ok AS (SELECT *, row_number() OVER (PARTITION BY trait_group ORDER BY
+                   (json_extract_string(abs_risk, '$.status') = 'ok') DESC, independent_pubs DESC, independent_n DESC,
+                   evaluated_n DESC) AS k
+                 FROM pgs_scores WHERE passed AND percentile IS NOT NULL AND z IS NOT NULL AND abs_risk IS NOT NULL)
+             SELECT x.trait_id FROM pgs_traits x LEFT JOIN ok ON ok.trait_group = x.trait_id AND ok.k = 1
+             WHERE coalesce(x.risk_pgs_id, '') <> coalesce(ok.pgs_id, '')
+                OR coalesce(x.abs_risk, '') <> coalesce(ok.abs_risk, '')"""),
+    Check("pgs.sourced", "Every computed polygenic score links to its paper",
+          "Each percentile on the page must lead to the study that built the score.", ("pgs_scores",),
+          "SELECT pgs_id FROM pgs_scores WHERE percentile IS NOT NULL AND pmid IS NULL AND doi IS NULL"),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

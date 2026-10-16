@@ -231,6 +231,8 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Brain & mind: your rare protein-changing variants in SFARI Gene brain-development genes"),
     ("pgs_scores", "1", lambda c: [pgs.out_scores(c)], _file_sql(pgs.out_scores),
      "Polygenic scores: your ancestry-adjusted percentile for each selected PGS Catalog score, with grades"),
+    ("pgs_traits", "1", lambda c: [pgs.out_traits(c)], _file_sql(pgs.out_traits),
+     "Polygenic scores per trait: the median across studies, the range of every score, whether studies agree"),
     ("pgs_evaluations", "1", _pgs_evals_in, _pgs_evals_sql,
      "Polygenic scores: every published evaluation of the selected scores (effect sizes, cohorts, ancestry)"),
     ("pgs_ancestry", "1", lambda c: [pgs.out_ancestry(c)], _file_sql(pgs.out_ancestry),

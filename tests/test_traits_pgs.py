@@ -1,4 +1,5 @@
 import csv
+import json
 from pathlib import Path
 
 from wgs import evidence as ev
@@ -94,20 +95,41 @@ def test_select_prefers_independently_tested_and_honours_pins(tmp_path):
     assert pinned[1]["pgs_id"] == "PGS2" and pinned[1]["alternate_for"] == "T1"
 
 
-def test_promote_replaces_unscorable_featured_pick():
-    base = {"trait_id": "T1", "section": "health", "label": "L", "why": ""}
-    sel = [{**base, "pgs_id": "A", "featured": True, "alternate_for": ""},
-           {**base, "pgs_id": "B", "featured": False, "alternate_for": "T1"},
-           {**base, "pgs_id": "C", "featured": False, "alternate_for": "T1"},
-           {**base, "trait_id": "T2", "pgs_id": "D", "featured": False, "section": "", "alternate_for": ""}]
-    scored = {"A": {"passed": False}, "B": {"passed": True, "percentile": 40.0},
-              "C": {"passed": True, "percentile": 60.0}, "D": {"passed": True, "percentile": 10.0}}
-    out = {r["pgs_id"]: r for r in pgs.promote(sel, scored)}
-    assert set(out) == {"A", "B", "D"}  # unused stand-in C dropped
-    assert out["B"]["featured"] and out["B"]["section"] == "health" and "A" in out["B"]["why"]
-    assert not out["A"]["featured"] and out["A"]["section"] == "" and out["A"]["why"] == "Replaced by B"
-    scored["A"] = {"passed": True, "percentile": 50.0}
-    assert [r["pgs_id"] for r in pgs.promote(sel, scored)] == ["A", "D"]  # pick scored: no stand-ins shown
+def _score(pid, group, pgp, pct, z, featured=False, pubs=0, risk=None, passed=True):
+    return {"pgs_id": pid, "trait_group": group, "pgp_id": pgp, "percentile": pct, "z": z, "passed": passed,
+            "featured": featured, "label": group, "section": "health", "independent_pubs": pubs,
+            "independent_n": 0, "evaluated_n": 0, "abs_risk": json.dumps(risk) if risk else None,
+            "overall": "Limited", "evidence_level": "Limited", "call_confidence": "High"}
+
+
+def test_trait_headline_is_median_over_studies_not_scores():
+    # Two scores from one paper (P1) count once: median of P1's 10/30 is 20, then median of (20, 90) = 55.
+    rows = [_score("A", "T", "P1", 10.0, -1.3, featured=True), _score("B", "T", "P1", 30.0, -0.5),
+            _score("C", "T", "P2", 90.0, 1.3), _score("D", "T", "P3", None, None, passed=False)]
+    (t,) = pgs.summarise(rows)
+    assert t["percentile"] == 55.0 and t["n_studies"] == 2 and t["n_scored"] == 3 and t["n_scores"] == 4
+    assert (t["low"], t["high"]) == (10.0, 90.0) and t["featured"]
+    assert t["agreement"] == "disagree"
+
+
+def test_trait_risk_from_most_tested_score_with_a_number():
+    ok = {"status": "ok", "you": 0.1}
+    rows = [_score("A", "T", "P1", 50.0, 0.0, pubs=9, risk={"status": "not_established", "reason": "x"}),
+            _score("B", "T", "P2", 60.0, 0.2, pubs=3, risk=ok), _score("C", "T", "P3", 70.0, 0.5, pubs=1, risk=ok)]
+    (t,) = pgs.summarise(rows)
+    assert t["risk_pgs_id"] == "B" and t["best_pgs_id"] == "A"
+
+
+def test_agreement_categories():
+    assert pgs.agreement([], 0)[0] == "none"
+    assert pgs.agreement([2.0], 1)[0] == "single"
+    assert pgs.agreement([0.2, 1.1], 2)[0] == "consistent"
+    assert pgs.agreement([0.4, 2.4, 1.4], 3)[0] == "same_direction"
+    assert pgs.agreement([-3.3, -1.2], 2)[0] == "same_direction"
+    assert pgs.agreement([-0.1, 1.6], 2)[0] == "disagree"
+    # Two methods from one paper that disagree are not hidden; the text says they are one study.
+    kind, text = pgs.agreement([-0.7, 1.2], 1)
+    assert kind == "disagree" and "one study" in text
 
 
 def test_files_skips_appledouble(tmp_path):
