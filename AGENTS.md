@@ -93,6 +93,7 @@ SELECT * FROM doc_changes;
 | `special_genes` | one hard-to-read gene re-read by a specialised caller (SMN1, GBA1) | `status` (typical / carrier / not_determined / …), `statement`, `detail` (copy numbers), grades, `next_step` |
 | `repeats` | one STRchive repeat-expansion locus | `alleles` (ExpansionHunter count), `clinical_estimate`, `confidence_interval`, STRchive ranges, `status` (typical / intermediate / disease_range / not_readable / …), `vcf_agrees`, `sensitive` (adult-onset: ask before discussing) |
 | `hla_associations` | one curated HLA–disease association | `carried`, `notable`, `direction`, `statement`, `quotes` (exact sentences with PubMed links) |
+| `blood_group` | one blood-group system (ABO, RhD) | `result`, `statement`, `detail` (allele copies, read counts, depth ratio), grades, `quotes` |
 | `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.

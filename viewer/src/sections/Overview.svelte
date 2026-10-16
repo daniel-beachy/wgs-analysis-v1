@@ -6,6 +6,7 @@
   import { go } from '../lib/router.svelte';
   import Card from '../components/Card.svelte';
   import Term from '../components/Term.svelte';
+  import GenomeStats from '../components/GenomeStats.svelte';
 
   let { m, index }: { m: Manifest; index: Index } = $props();
   const load = $derived(Promise.all([loadDoc(m, 'qc'), loadDoc(m, 'sections'), loadDoc(m, 'coverage'), loadDoc(m, 'knowledge'), loadDoc(m, 'annotate')]));
@@ -36,6 +37,10 @@
         {/if}
       </div>
     </section>
+
+    <Card title="How your genome compares" subtitle="Your counts next to the typical genome in the 1000 Genomes Project, where the definitions are close enough to compare.">
+      <GenomeStats {m} />
+    </Card>
 
     <div class="grid cols-3">
       {#each tiles as s}

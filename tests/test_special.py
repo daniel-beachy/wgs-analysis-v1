@@ -80,3 +80,21 @@ def test_curated_first_author_check():
     from wgs.audit import first_author_matches
     assert first_author_matches("Kallweit U, et al. J Clin Sleep Med. 2022", {"authors": [{"name": "Kallweit U"}]})
     assert not first_author_matches("Ziemann LC, et al. J Clin Sleep Med. 2022", {"authors": [{"name": "Kallweit U"}]})
+
+
+def test_abo_rules():
+    assert special.abo_type(0, 0, 0)[0] == "O"
+    assert special.abo_type(1, 0, 0)[0] == "A"
+    assert special.abo_type(1, 1, 0)[0] == "B"
+    assert special.abo_type(2, 1, 0)[0] == "AB"
+    assert special.abo_type(2, 0, 1)[1].endswith("(A2 subgroup)")
+    assert special.abo_type(None, 0, 0)[0] is None          # unreadable position: no guess
+    assert special.abo_type(0, 1, 0)[0] is None             # B markers on an O backbone: needs a lab
+
+
+def test_rhd_rules():
+    t = {"zero_below": 0.15, "one_between": [0.3, 0.7], "two_above": 0.8}
+    assert special.rhd_type(0.02, t)[0] == 0
+    assert special.rhd_type(0.5, t)[0] == 1
+    assert special.rhd_type(1.0, t)[0] == 2
+    assert special.rhd_type(0.2, t)[0] is None and special.rhd_type(None, t)[0] is None

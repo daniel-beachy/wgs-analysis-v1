@@ -356,6 +356,10 @@ def curated_items() -> list[dict]:
     out.extend({"record": f"hla: {a['id']}", "pmid": q.get("pmid"), "url": q.get("url"), "quote": q.get("quote"),
                 "source": q.get("source")}
                for a in special.hla_table() for q in a.get("quotes", []) + a.get("caveats", []))
+    bt = special.blood_table()
+    out.extend({"record": f"blood group: {k}", "pmid": q.get("pmid"), "url": q.get("url"), "quote": q.get("quote"),
+                "source": q.get("source")}
+               for k in ("abo", "rhd") for q in bt.get(k, {}).get("quotes", []) + bt.get(k, {}).get("caveats", []))
     return out
 
 

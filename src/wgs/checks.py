@@ -217,6 +217,11 @@ CHECKS: list[Check] = [
           """SELECT association_id FROM hla_associations WHERE coalesce(json_array_length(quotes), 0) = 0
              OR NOT list_bool_and(list_transform(CAST(json_extract(quotes, '$[*].url') AS VARCHAR[]),
                                                  u -> regexp_matches(u, 'pubmed[.]ncbi[.]nlm[.]nih[.]gov/[0-9]+')))"""),
+    Check("blood_group.sourced", "Every blood-group result quotes its source and was read, not assumed",
+          "The O position matches the reference genome, so 'no variant' means O; that is only safe where the "
+          "position was readable, and the result must cite the studies behind the rule.", ("blood_group",),
+          """SELECT system FROM blood_group WHERE coalesce(json_array_length(quotes), 0) = 0
+             OR (result IS NULL) <> (call_level = 'Not callable')"""),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "

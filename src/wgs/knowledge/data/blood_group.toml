@@ -1,0 +1,38 @@
+# Blood group from the genome (ADR-021). Same quoting policy as baseline_risk.toml (ADR-018): every rule cites a
+# PubMed record and quotes the sentence that supports it; `wgs audit --only curated` re-checks the quotes.
+# Positions are GRCh37, forward strand (ABO is on the reverse strand; the coding names are given alongside), as
+# mapped by dbSNP. The GRCh37 reference carries the O allele at c.261 (the deletion), so "same as the reference" there
+# means O.
+
+[abo]
+# Copies of the inserted base at c.261 = number of non-O (A or B) alleles.
+non_o = { rsid = "rs8176719", chrom = "9", pos = 136132908, ref = "-", alt = "C", coding = "c.261delG reversed (non-O)" }
+# B-specific changes that set the enzyme's preference (2 of the 4 A/B differences); copies = B alleles.
+b_markers = [
+  { rsid = "rs8176746", chrom = "9", pos = 136131322, ref = "G", alt = "T", coding = "c.796C>A (p.Leu266Met)" },
+  { rsid = "rs8176747", chrom = "9", pos = 136131315, ref = "C", alt = "G", coding = "c.803G>C (p.Gly268Ala)" },
+]
+# The common A2 subgroup allele.
+a2_marker = { rsid = "rs56392308", chrom = "9", pos = 136131058, ref = "G", alt = "-", coding = "c.1061delC (A2)" }
+quotes = [
+  { source = "Yamamoto F, et al. Nature. 1990", pmid = "2333095", url = "https://pubmed.ncbi.nlm.nih.gov/2333095/", quote = "A critical single-base deletion was found in the O gene, which results in an entirely different, inactive protein incapable of modifying the H antigen." },
+  { source = "Yamamoto F, et al. Nature. 1990", pmid = "2333095", url = "https://pubmed.ncbi.nlm.nih.gov/2333095/", quote = "The A and B genes differ in a few single-base substitutions, changing four amino-acid residues that may cause differences in A and B transferase specificity." },
+  { source = "Lane WJ, et al. Lancet Haematol. 2018", pmid = "29780001", url = "https://pubmed.ncbi.nlm.nih.gov/29780001/", quote = "Addressing discordances led to development of an improved algorithm that was 99·8% concordant for the remaining 90 MedSeq genomes." },
+]
+
+[rhd]
+# RHD copy number from read depth against its near-identical neighbour RHCE (always present), reads with MAPQ ≥ 20.
+gene = "RHD"
+control = "RHCE"
+min_mapq = 20
+# ratio = depth(RHD) / depth(RHCE): ~0 → no RHD (RhD-negative), ~0.5 → one copy, ~1 → two copies.
+zero_below = 0.15
+one_between = [0.3, 0.7]
+two_above = 0.8
+quotes = [
+  { source = "Singleton BK, et al. Blood. 2000", pmid = "10607679", url = "https://pubmed.ncbi.nlm.nih.gov/10607679/", quote = "The D-negative phenotype is considered to result, almost invariably, from homozygosity for a complete deletion of RHD." },
+  { source = "Wagner FF, Flegel WA. Blood. 2000", pmid = "10845894", url = "https://pubmed.ncbi.nlm.nih.gov/10845894/", quote = "In whites, a cde haplotype with a deletion of the whole RHD gene occurs with a frequency of approximately 40%." },
+]
+caveats = [
+  { source = "Singleton BK, et al. Blood. 2000", pmid = "10607679", url = "https://pubmed.ncbi.nlm.nih.gov/10607679/", quote = "Of 82 D-negative black Africans, 66% had RHDpsi, 15% had the RHD-CE-D hybrid gene associated with the VS+ V- phenotype, and only 18% completely lacked RHD." },
+]

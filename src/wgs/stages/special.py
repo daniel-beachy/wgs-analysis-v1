@@ -48,6 +48,7 @@ STRCHIVE_EVIDENCE = {"Definitive": "Strong", "Strong": "Strong", "Moderate": "Mo
                      "Provisional": "Limited"}
 ADULT_ONSET = 18  # STRchive age_onset_min at or above this → adult-onset → click-to-reveal (AGENTS.md §5.9)
 HLA_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "hla_associations.toml"
+BLOOD_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "blood_group.toml"
 HLA_MIN_QUALITY = 20  # T1K allele quality; lower calls are graded Medium
 IUPAC = {"N": "[ACGT]", "R": "[AG]", "Y": "[CT]", "S": "[CG]", "W": "[AT]", "K": "[GT]", "M": "[AC]", "B": "[CGT]",
          "D": "[AGT]", "H": "[ACT]", "V": "[ACG]"}
@@ -73,6 +74,14 @@ def out_claims(ctx: Context) -> Path:
 
 def out_hla(ctx: Context) -> Path:
     return out_dir(ctx) / "hla_associations.parquet"
+
+
+def out_blood(ctx: Context) -> Path:
+    return out_dir(ctx) / "blood_group.parquet"
+
+
+def out_stats(ctx: Context) -> Path:
+    return out_dir(ctx) / "genome_stats.json"
 
 
 def out_summary(ctx: Context) -> Path:
@@ -483,6 +492,215 @@ def _hla(ctx: Context) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Blood group
+# ---------------------------------------------------------------------------------------------------------------
+
+
+@cache
+def blood_table() -> dict:
+    return tomllib.loads(BLOOD_TABLE.read_text()) if BLOOD_TABLE.exists() else {}
+
+
+def abo_type(non_o: int | None, b: int | None, a2: int | None) -> tuple[str | None, str]:
+    """ABO group from allele copy counts (rules and sources in blood_group.toml)."""
+    if non_o is None or b is None:
+        return None, "A position that decides the ABO group could not be read"
+    if b > non_o:
+        return None, "The B markers and the O position disagree (an uncommon allele); typing needs a lab test"
+    a = non_o - b
+    group = "AB" if a and b else "A" if a else "B" if b else "O"
+    alleles = ["A"] * a + ["B"] * b + ["O"] * (2 - non_o)
+    sub = " (A2 subgroup)" if group in ("A", "AB") and a2 else ""
+    return group, f"Your two ABO copies read as {'/'.join(alleles)}: blood group {group}{sub}"
+
+
+def rhd_type(ratio: float | None, t: dict) -> tuple[int | None, str]:
+    if ratio is None:
+        return None, "RHD read depth could not be measured"
+    if ratio < t["zero_below"]:
+        return 0, "No RHD copies: RhD-negative (Rh −)"
+    if t["one_between"][0] <= ratio <= t["one_between"][1]:
+        return 1, "One RHD copy: RhD-positive (Rh +), carrying one RhD-negative copy"
+    if ratio > t["two_above"]:
+        return 2, "Two RHD copies: RhD-positive (Rh +)"
+    return None, f"RHD read depth is between the expected levels (ratio {ratio:.2f}); typing needs a lab test"
+
+
+def _copies(con, vp: Path, m: dict, window: int = 3) -> int | None:
+    """Copies of a marker's alternate allele from the VCF; 0 if absent at a callable position, None if unknown."""
+    rows = con.execute(f"""SELECT ref, alt, gt FROM '{vp}' WHERE chrom = ? AND pos BETWEEN ? AND ?
+        AND filter = 'PASS'""", [m["chrom"], m["pos"] - window, m["pos"] + window]).fetchall()
+    for ref, alt, gt in rows:
+        kind_ok = (m["ref"] == "-" and len(alt) > len(ref)) or (m["alt"] == "-" and len(alt) < len(ref)) or \
+                  (len(ref) == len(alt) == 1 and alt == m["alt"])
+        if kind_ok:
+            return sum(x != "0" for x in re.split(r"[/|]", gt) if x != ".")
+    return 0
+
+
+def _callable(con, cp: Path, chrom: str, pos: int) -> bool:
+    return bool(cp.exists() and con.execute(f"""SELECT 1 FROM '{cp}' WHERE chrom = ? AND start < ? AND "end" >= ?
+        AND state IN ('CALLABLE', 'HIGH')""", [chrom, pos, pos]).fetchone())
+
+
+def _read_counts(ctx: Context, chrom: str, pos: int) -> tuple[int, int] | None:
+    """(reads with an insertion right after `pos`, other reads) at a 1-based position, straight from the CRAM."""
+    import pysam
+
+    aln = ctx.inv.first("cram") or ctx.inv.first("bam")
+    if not aln:
+        return None
+    name = f"chr{chrom}" if "chr1" in reference.cram_contigs(ctx) else chrom
+    ins = other = 0
+    with pysam.AlignmentFile(str(aln.path), "rc" if aln.kind == "cram" else "rb",
+                             reference_filename=str(reference.reference_fasta(ctx))) as af:
+        for col in af.pileup(name, pos - 1, pos, truncate=True, stepper="nofilter", min_base_quality=0):
+            for pr in col.pileups:
+                a = pr.alignment
+                if a.is_duplicate or a.is_secondary or a.mapping_quality < 20:
+                    continue
+                ins, other = (ins + 1, other) if pr.indel > 0 else (ins, other + 1)
+    return ins, other
+
+
+def _gene_depth(ctx: Context, symbol: str, min_mapq: int) -> float | None:
+    import pysam
+
+    g = Store(ctx.cfg).table("ensembl", "genes")
+    aln = ctx.inv.first("cram") or ctx.inv.first("bam")
+    if not g or not aln:
+        return None
+    row = duckdb.sql(f"SELECT chrom, start, \"end\" FROM '{g}' WHERE symbol = '{symbol}'").fetchone()
+    if not row:
+        return None
+    chrom, start, end = row
+    name = f"chr{chrom}" if "chr1" in reference.cram_contigs(ctx) else chrom
+    bases = 0
+    with pysam.AlignmentFile(str(aln.path), "rc" if aln.kind == "cram" else "rb",
+                             reference_filename=str(reference.reference_fasta(ctx))) as af:
+        for r in af.fetch(name, start, end):
+            if r.is_duplicate or r.is_secondary or r.is_supplementary or r.mapping_quality < min_mapq:
+                continue
+            bases += max(0, min(r.reference_end or start, end) - max(r.reference_start, start))
+    return bases / (end - start)
+
+
+def _blood(ctx: Context) -> list[dict]:
+    t = blood_table()
+    vp, cp = variants.variants_parquet(ctx), ctx.work / "coverage" / "callable.parquet"
+    if not t or not vp.exists():
+        return []
+    con = duckdb.connect()
+    out = []
+    abo = t["abo"]
+    markers = [abo["non_o"], *abo["b_markers"], abo["a2_marker"]]
+    readable = all(_callable(con, cp, m["chrom"], m["pos"]) for m in markers)
+    non_o = _copies(con, vp, abo["non_o"]) if readable else None
+    b = min(_copies(con, vp, m) for m in abo["b_markers"]) if readable else None
+    a2 = _copies(con, vp, abo["a2_marker"]) if readable else None
+    group, text = abo_type(non_o, b, a2)
+    reads = _read_counts(ctx, abo["non_o"]["chrom"], abo["non_o"]["pos"])
+    reasons = [f"{'All' if readable else 'Not all'} {len(markers)} deciding positions were readable in your data"]
+    agree = True
+    if reads and non_o is not None:
+        ins, other = reads
+        frac = ins / (ins + other) if ins + other else None
+        expect = {0: 0, 1: 0.5, 2: 1}[non_o]
+        agree = frac is not None and abs(frac - expect) < 0.25
+        reasons.append(f"Independent read count at the O position: {ins} of {ins + other} reads carry the non-O base "
+                       f"({'agrees' if agree else 'disagrees'} with the VCF)")
+    out.append({"system": "ABO", "result": group, "statement": text, "detail": json.dumps(
+                    {"non_o_copies": non_o, "b_copies": b, "a2_copies": a2, "reads": reads}),
+                "evidence_level": "Strong",
+                "evidence_reasons": ["The ABO alleles were defined at the DNA level in 1990 and genome-based typing "
+                                     "is >99% concordant with serology (quoted)"],
+                "call_level": "Not callable" if group is None else ("High" if agree else "Low"),
+                "call_reasons": reasons, "quotes": json.dumps(abo["quotes"])})
+    rh = t["rhd"]
+    d = _gene_depth(ctx, rh["gene"], rh["min_mapq"])
+    c = _gene_depth(ctx, rh["control"], rh["min_mapq"])
+    ratio = d / c if d is not None and c else None
+    copies, text = rhd_type(ratio, rh)
+    out.append({"system": "RhD", "result": None if copies is None else ("RhD-negative" if copies == 0 else
+                                                                        "RhD-positive"),
+                "statement": text, "detail": json.dumps({"rhd_copies": copies, "rhd_depth": d, "rhce_depth": c,
+                                                         "ratio": ratio}),
+                "evidence_level": "Strong",
+                "evidence_reasons": ["In people of European ancestry RhD-negative is almost always two deleted RHD "
+                                     "copies (quoted)"],
+                "call_level": "Not callable" if copies is None else "High",
+                "call_reasons": [f"Reads mapping confidently to {rh['gene']}: {d:.1f}× average depth, against "
+                                 f"{c:.1f}× on its twin {rh['control']} (ratio {ratio:.2f})" if ratio is not None
+                                 else "Depth not measured"],
+                "quotes": json.dumps(rh["quotes"] + rh.get("caveats", []))})
+    for r in out:
+        r["overall"] = ev.overall(r["evidence_level"], r["call_level"])
+    return out
+
+
+def blood_claims(rows: list[dict]) -> list[dict]:
+    return [{"claim_id": f"special:blood:{r['system']}", "section": "traits", "group": "blood_group",
+             "kind": "blood_group", "category": "association", "category_label": "Blood group", "subject": r["system"],
+             "gene": "ABO" if r["system"] == "ABO" else "RHD", "statement": r["statement"],
+             "genotype": r["result"], "evidence_level": r["evidence_level"], "evidence_reasons": r["evidence_reasons"],
+             "call_level": r["call_level"], "call_reasons": r["call_reasons"], "overall": r["overall"],
+             "sensitive": False,
+             "sources": json.dumps([{"source": q["source"], "version": None, "record": f"PMID {q['pmid']}",
+                                     "url": q["url"], "quote": q["quote"]} for q in json.loads(r["quotes"])])}
+            for r in rows if r["result"]]
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# How your genome compares
+# ---------------------------------------------------------------------------------------------------------------
+
+AUTON = {"source": "1000 Genomes Project Consortium (Auton A, et al.). Nature. 2015", "pmid": "26432245",
+         "url": "https://pubmed.ncbi.nlm.nih.gov/26432245/",
+         "fulltext": "https://europepmc.org/article/PMC/PMC4750478"}
+PTV = "^(stop_gained|frameshift|splice_acceptor|splice_donor)"
+
+
+def genome_stats(ctx: Context) -> dict:
+    """Counts that can be set against a published 'typical genome' with similar definitions (ADR-021). Counts whose
+    definitions or sequencing depth differ too much (rare variants, ClinVar hits) are deliberately left out."""
+    vp, ap = variants.variants_parquet(ctx), ctx.work / "annotate" / "annotations.parquet"
+    if not vp.exists():
+        return {}
+    con = duckdb.connect()
+    sites, snv = con.execute(f"""SELECT count(*), count(*) FILTER (WHERE chrom NOT IN ('X', 'Y', 'MT')
+        AND length(ref) = 1 AND length(alt) = 1) FROM '{vp}' WHERE filter = 'PASS'
+        AND gt NOT IN ('0/0', '0|0', './.', '.')""").fetchone()
+    rows = [
+        {"id": "sites", "label": "Places your genome differs from the reference genome", "value": sites,
+         "typical": "4.1 million to 5.0 million", "typical_low": 4.1e6, "typical_high": 5.0e6,
+         "definition": "Confident (PASS) variant sites on any chromosome",
+         "quote": "We find that a typical genome differs from the reference human genome at 4.1 million to 5.0 "
+                  "million sites"},
+        {"id": "snv", "label": "Single-letter differences on chromosomes 1–22", "value": snv,
+         "typical": "3.53 million (median, European genomes)", "typical_low": None, "typical_high": None,
+         "definition": "Confident single-nucleotide variants, autosomes only (as in the paper's Table 1)",
+         "quote": "Table 1: Median autosomal variant sites per genome (EUR: SNPs 3.53M)"},
+    ]
+    if ap.exists():
+        ptv, hom = con.execute(f"""SELECT count(*), count(*) FILTER (WHERE gt IN ('1/1', '1|1')) FROM '{ap}'
+            WHERE filter = 'PASS' AND transcript_basis LIKE 'MANE Select%' AND impact = 'HIGH'
+            AND regexp_matches(consequence, '{PTV}')""").fetchone()
+        rows.append({"id": "ptv", "label": "Protein-truncating variants (stop, frameshift, splice site)", "value": ptv,
+                     "homozygous": hom, "typical": "149–182", "typical_low": 149, "typical_high": 182,
+                     "definition": "Confident variants that cut a protein short on each gene's main (MANE Select) "
+                                   "transcript; most are common and harmless, in genes that tolerate it",
+                     "quote": "When we restricted analyses to the variants most likely to affect gene function, we "
+                              "found a typical genome contained 149–182 sites with protein truncating variants"})
+    for r in rows:
+        r["source"] = AUTON
+        r["in_range"] = None if r["typical_low"] is None else r["typical_low"] <= r["value"] <= r["typical_high"]
+    return {"rows": rows, "caveat": "The 1000 Genomes study sequenced most genomes at about 7× depth and used "
+                                    "different software; your genome was sequenced at higher depth, so the "
+                                    "definitions are similar but not identical. Rare-variant and ClinVar counts "
+                                    "are not compared because those differences dominate them."}
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # Claims
 # ---------------------------------------------------------------------------------------------------------------
 
@@ -575,11 +793,19 @@ def _special(ctx: Context) -> dict:
         repeats = []
     hla = _hla(ctx)
     _write(hla, out_hla(ctx), "association_id")
+    try:
+        blood = _blood(ctx)
+    except Exception as e:
+        summary["errors"].append(f"blood group: {e}")
+        blood = []
+    _write(blood, out_blood(ctx), "system")
+    write_json(out_stats(ctx), genome_stats(ctx))
     summary["repeats"] = {s: sum(r["status"] == s for r in repeats) for s in sorted({r["status"] for r in repeats})}
     summary["knowledge"] = {"strchive": (st.current("strchive") or {}).get("version")}
     _write(genes, out_genes(ctx), "gene")
     _write(repeats, out_repeats(ctx), "locus_id")
-    _write(gene_claims(genes) + repeat_claims(repeats) + hla_claims(hla), out_claims(ctx), "claim_id")
+    _write(gene_claims(genes) + repeat_claims(repeats) + hla_claims(hla) + blood_claims(blood), out_claims(ctx),
+           "claim_id")
     write_json(out_summary(ctx), summary)
     return {"genes": {g["gene"]: g["status"] for g in genes}, "repeats": summary["repeats"],
             "errors": summary["errors"]}
@@ -597,7 +823,8 @@ def _available(ctx: Context) -> str | None:
 
 def _inputs(ctx: Context) -> list[Path]:
     aln = ctx.inv.first("cram") or ctx.inv.first("bam")
-    return [p for p in (aln.path if aln else None, qc.out_path(ctx), pgx.hla_out(ctx), HLA_TABLE)
+    return [p for p in (aln.path if aln else None, qc.out_path(ctx), pgx.hla_out(ctx), HLA_TABLE, BLOOD_TABLE,
+                        variants.variants_parquet(ctx), ctx.work / "annotate" / "annotations.parquet")
             if p and p.exists()]
 
 
@@ -608,8 +835,9 @@ def _params(ctx: Context) -> dict:
 
 
 STAGE = Stage(
-    name="special", version="2", title="Specialised callers (SMN1, GBA1, repeat expansions, HLA)", fn=_special,
+    name="special", version="3", title="Specialised callers (SMN1, GBA1, repeats, HLA, blood group)", fn=_special,
     inputs=_inputs,
-    outputs=lambda ctx: [out_genes(ctx), out_repeats(ctx), out_hla(ctx), out_claims(ctx), out_summary(ctx)],
+    outputs=lambda ctx: [out_genes(ctx), out_repeats(ctx), out_hla(ctx), out_blood(ctx), out_claims(ctx),
+                         out_stats(ctx), out_summary(ctx)],
     available=_available, params=_params,
 )

@@ -244,6 +244,8 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "Repeat expansions: your repeat size at every STRchive disease locus vs its typical and disease ranges"),
     ("hla_associations", "1", lambda c: [special.out_hla(c)], _file_sql(special.out_hla),
      "HLA types with well-established disease associations: whether you carry them, with the quoted studies"),
+    ("blood_group", "1", lambda c: [special.out_blood(c)], _file_sql(special.out_blood),
+     "Blood group (ABO and RhD) read from your genome, with the deciding positions and quoted sources"),
     ("ancestry_components", "1", lambda c: [ancestry.out_components(c)], _file_sql(ancestry.out_components),
      "Ancestry: your share of each 1000 Genomes continental group, with its noise floor and grades"),
     ("ancestry_populations", "1", lambda c: [ancestry.out_populations(c)], _file_sql(ancestry.out_populations),
@@ -272,6 +274,7 @@ def _documents(ctx: Context) -> dict[str, Path]:
         "pgs": pgs.out_summary(ctx),
         "ancestry": ancestry.out_summary(ctx),
         "special": special.out_summary(ctx),
+        "genome_stats": special.out_stats(ctx),
     }
     return {k: v for k, v in docs.items() if v.exists()}
 

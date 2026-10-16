@@ -9,6 +9,7 @@
   import Term from '../components/Term.svelte';
   import TraitSnps from '../components/TraitSnps.svelte';
   import PgsList from '../components/PgsList.svelte';
+  import BloodGroup from '../components/BloodGroup.svelte';
 
   let { m, def, sex }: { m: Manifest; def: SectionDef; sex?: string } = $props();
   const learnSlug = $derived(def.learn ? sectionFor(def.learn) : undefined);
@@ -28,6 +29,10 @@
     </ol>
     <p>The pills read as elsewhere: <strong>Evidence</strong> (how well the result predicts the trait in published studies) · <strong>Your call</strong> (how reliably it was measured in your data) · <strong>Overall</strong> (the weaker of the two). Polygenic scores are never graded Strong: even good ones explain only a slice of the variation between people.</p>
   </Explain>
+
+  <Card title="Blood group" subtitle="ABO and RhD read from your genome: the classic checkable result.">
+    <BloodGroup {m} />
+  </Card>
 
   <Card title="1 · Single-variant traits" subtitle="Variants the GWAS Catalog links to a trait in several studies. Click a row for the study and grades.">
     <TraitSnps {m} />
