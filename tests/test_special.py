@@ -98,3 +98,44 @@ def test_rhd_rules():
     assert special.rhd_type(0.5, t)[0] == 1
     assert special.rhd_type(1.0, t)[0] == 2
     assert special.rhd_type(0.2, t)[0] is None and special.rhd_type(None, t)[0] is None
+
+
+def _exons(ratios, gcs=None, gene="G"):
+    gcs = gcs or [0.45] * len(ratios)
+    return [{"gene": gene, "chrom": "1", "start": i * 1000, "end": i * 1000 + 100, "exon": i + 1, "ratio": r,
+             "ratio_all": r, "gc": g} for i, (r, g) in enumerate(zip(ratios, gcs, strict=True))]
+
+
+def test_gc_correction_removes_gc_driven_dips():
+    # 40 normal mid-GC exons plus 40 high-GC exons that all read at ~0.6: a GC effect, not a deletion.
+    ex = _exons([1.0 + (i % 5) * 0.02 for i in range(40)] + [0.6 + (i % 5) * 0.02 for i in range(40)],
+                [0.45] * 40 + [0.70] * 40)
+    special.gc_correct(ex)
+    assert not special.depth_runs(ex)
+
+
+def test_real_deletion_survives_gc_correction():
+    ratios = [1.0 + (i % 7) * 0.01 for i in range(60)]
+    ratios[20:23] = [0.5, 0.48, 0.52]          # one copy lost over three neighbouring exons
+    ex = _exons(ratios)
+    special.gc_correct(ex)
+    runs = special.depth_runs(ex)
+    assert len(runs) == 1 and runs[0]["svtype"] == "DEL" and runs[0]["exons"] == [21, 22, 23]
+
+
+def test_extreme_gc_and_unmappable_exons_give_no_signal():
+    e = {"gc": 0.80, "gc_ratio": 0.2, "gc_ratio_all": 0.2, "gc_z": -9}
+    assert special.depth_kind(e) is None
+    # Dip only among uniquely placed reads (all reads normal): mappability, not a deletion.
+    assert special.depth_kind({"gc": 0.45, "gc_ratio": 0.3, "gc_ratio_all": 1.0, "gc_z": -9}) is None
+
+
+def test_cnv_classification():
+    base = {"svtype": "DEL", "exons": ["G exon 2"], "gnomad": None}
+    assert special.classify_cnv({**base, "delly": True, "depth_support": True})[0] == "possible_exon_deletion"
+    assert special.classify_cnv({**base, "delly": False, "depth_support": True})[0] == "unconfirmed_signal"
+    assert special.classify_cnv({**base, "delly": True, "depth_support": True,
+                                 "gnomad": {"af": 0.2, "popmax_af": 0.3}})[0] == "common"
+    assert special.classify_cnv({**base, "exons": [], "delly": True, "depth_support": False})[0] == "no_exon"
+    many = {**base, "exons": [f"G exon {i}" for i in range(6)], "delly": False, "depth_support": True}
+    assert special.classify_cnv(many)[0] == "long_depth_signal"

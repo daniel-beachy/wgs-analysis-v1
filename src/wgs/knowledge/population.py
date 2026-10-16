@@ -90,3 +90,35 @@ class GnomAD(Source):
         con.execute(f"COPY f TO '{meta}' (FORMAT parquet)")
         return Built(version="v2.1.1", tables={"fields": meta}, upstream=upstream,
                      notes={"files": ["gnomad.hg37.zip"], "fields": fields, "chroms": chroms})
+
+
+GNOMAD_SV = "https://storage.googleapis.com/gcp-public-data--gnomad/papers/2019-sv/gnomad_v2.1_sv.sites.bed.gz"
+
+
+class GnomadSV(Source):
+    id = "gnomad_sv"
+    title = "gnomAD-SV v2.1 (structural variants)"
+    homepage = "https://gnomad.broadinstitute.org/"
+    licence = "CC0 (gnomAD)"
+    cadence = "frozen (v2.1 is the last GRCh37-native SV release)"
+    description = ("Deletions, duplications and other structural variants in ≈10,800 genomes, with how common each "
+                   "is. Used to tell common, harmless copy-number changes from rare ones.")
+
+    def probe(self, pin: str | None = None) -> list[Upstream]:
+        return [head(GNOMAD_SV)]
+
+    def build(self, upstream: list[Upstream], scratch: Path, out: Path) -> Built:
+        src = fetch(upstream[0].url, scratch / "gnomad_sv.bed.gz", upstream[0].size)
+        dst = out / "sv.parquet"
+        duckdb.connect().execute(f"""COPY (
+            SELECT replace("#chrom", 'chr', '') AS chrom, CAST("start" AS BIGINT) AS start, CAST("end" AS BIGINT)
+                   AS "end", name, svtype, TRY_CAST(AF AS DOUBLE) AS af, TRY_CAST(POPMAX_AF AS DOUBLE) AS popmax_af,
+                   FILTER AS filter, nullif(PROTEIN_CODING__LOF, 'NA') AS lof_genes,
+                   nullif(PROTEIN_CODING__DUP_LOF, 'NA') AS dup_lof_genes,
+                   nullif(PROTEIN_CODING__COPY_GAIN, 'NA') AS copy_gain_genes
+            FROM read_csv('{src}', delim='\t', header=true, all_varchar=true, compression='gzip')
+            WHERE svtype IN ('DEL', 'DUP', 'CNV', 'MCNV'))
+            TO '{dst}' (FORMAT parquet)""")
+        return Built(version="2.1", tables={"sv": dst}, upstream=upstream,
+                     notes={"citation": "Collins RL, et al. A structural variation reference for medical and "
+                                        "population genetics. Nature. 2020;581:444-451. PMID 32461652."})

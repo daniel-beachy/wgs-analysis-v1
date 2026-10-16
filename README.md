@@ -102,6 +102,7 @@ The dashboard's **What changed** tab then shows which sources moved to a new ver
 | [1000 Genomes reference panel](https://ftp.ebi.ac.uk/pub/databases/spot/pgs/resources/) (PGS Catalog build) | Ancestry-matched percentiles for polygenic scores (≈ 7 GB download) | Open access |
 | [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
 | [STRchive](https://strchive.org) | Repeat-expansion disease loci: typical and disease ranges, evidence, references | MIT |
+| [gnomAD-SV v2.1](https://gnomad.broadinstitute.org/) | How common each deletion/duplication is (GRCh37, ≈10,800 genomes) | CC0 |
 | [IGSR populations](https://www.internationalgenome.org/data-portal/population) | Names and sampling locations of the 26 1000 Genomes populations (Ancestry tab) | Free to use without restriction |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).
@@ -143,7 +144,7 @@ Each dashboard section declares the inputs it **requires** and the inputs that *
 
 ### Hard-to-read genes, repeat expansions and HLA
 
-`special` (about 2 minutes) re-reads what a VCF can't show from the CRAM: *SMN1*/*SMN2* copy number (SMNCopyNumberCaller), *GBA1* (Gauchian), repeat-expansion disease loci (ExpansionHunter against STRchive's ranges) and HLA disease associations (T1K types against a quoted, curated table). The tools live in their own environment: `pixi install -e special`. Illumina's callers are pinned to their last Apache-2.0 releases (see ADR-021). Needs the `strchive` knowledge source. Design: [ADR-021](docs/DECISIONS.md).
+`special` (about 5 minutes) re-reads what a VCF can't show from the CRAM: *SMN1*/*SMN2* copy number (SMNCopyNumberCaller), *GBA1* (Gauchian), repeat-expansion disease loci (ExpansionHunter against STRchive's ranges), HLA disease associations (T1K types against a quoted, curated table), blood group (ABO, RhD) and deletions/duplications in the 84 ACMG genes (Delly plus GC-corrected exon depth, compared with gnomAD-SV). It also writes the "how your genome compares" counts. The tools live in their own environment: `pixi install -e special`. Illumina's callers are pinned to their last Apache-2.0 releases (see ADR-021). Needs the `strchive` knowledge source. Design: [ADR-021](docs/DECISIONS.md).
 
 ### Ancestry and haplogroups
 

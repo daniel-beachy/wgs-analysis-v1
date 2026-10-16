@@ -10,11 +10,11 @@ from .gwas import GwasCatalog, Sfari
 from .hla import ImgtHla
 from .pgs import PgsCatalog, PgsReference
 from .pharmcat import PharmCAT
-from .population import GnomAD, ThousandGenomes
+from .population import GnomAD, GnomadSV, ThousandGenomes
 from .predictors import AlphaMissense, GeneConstraint, Revel
 from .strchive import Strchive
 
 SOURCES = [Ensembl(), Mane(), ClinVar(), ClinGen(), ThousandGenomes(), GnomAD(), HPO(), Mondo(), Orphanet(), AcmgSF(),
            GeneConstraint(), AlphaMissense(), Revel(),
            PharmCAT(), ImgtHla(), MedlinePlus(), NcbiGene(),
-           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari(), IgsrPopulations(), Strchive()]
+           PgsCatalog(), PgsReference(), GwasCatalog(), Sfari(), IgsrPopulations(), Strchive(), GnomadSV()]

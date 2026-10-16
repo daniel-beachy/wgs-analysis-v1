@@ -94,6 +94,8 @@ SELECT * FROM doc_changes;
 | `repeats` | one STRchive repeat-expansion locus | `alleles` (ExpansionHunter count), `clinical_estimate`, `confidence_interval`, STRchive ranges, `status` (typical / intermediate / disease_range / not_readable / …), `vcf_agrees`, `sensitive` (adult-onset: ask before discussing) |
 | `hla_associations` | one curated HLA–disease association | `carried`, `notable`, `direction`, `statement`, `quotes` (exact sentences with PubMed links) |
 | `blood_group` | one blood-group system (ABO, RhD) | `result`, `statement`, `detail` (allele copies, read counts, depth ratio), grades, `quotes` |
+| `cnv_genes` | one ACMG gene in the deletion/duplication scan | `exons`, `min_ratio`/`max_ratio` (GC-corrected depth), `extreme_gc_exons`, `low_mappability_exons` (not judgeable), `status` |
+| `cnv_events` | one candidate deletion/duplication | `delly`, `depth_support`, `mean_ratio`, `gnomad` (JSON), `status` (possible_exon_deletion / … / unconfirmed_signal / common / no_exon), grades. Only `possible_*` rows are findings |
 | `brain_variants` | one rare protein-changing variant in a SFARI gene | `sfari_score`, predictions, `flagged` / `evidence_level` (always Limited) |
 
 Coordinates are **GRCh37/hg19** with chromosome names without `chr`.

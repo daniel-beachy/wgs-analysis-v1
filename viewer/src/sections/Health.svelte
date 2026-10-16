@@ -11,6 +11,7 @@
   import PgsList from '../components/PgsList.svelte';
   import Repeats from '../components/Repeats.svelte';
   import HlaList from '../components/HlaList.svelte';
+  import CnvScan from '../components/CnvScan.svelte';
   import Explain from '../components/Explain.svelte';
   import Term from '../components/Term.svelte';
 
@@ -101,8 +102,9 @@
         </div>
       {/if}
       <p class="legend small faint"><span class="gene demo">GENE</span> nothing found · <span class="gene demo note">GENE</span> listed variant, not reportable · <span class="gene demo flag">GENE</span> reportable · <span class="gene demo low">GENE</span> under 90% readable. Click a gene for details.</p>
+      <CnvScan {m} />
       <Explain title="What “no findings” does and doesn’t mean">
-        <p>It means none of your small variants (single-letter changes and short insertions/deletions) in these genes is classified pathogenic in ClinVar in a way that meets the reporting rule. Repeat expansions are checked separately below. It does <em>not</em> rule out: larger deletions or duplications of whole exons, variants in the few percent of each gene that couldn’t be read confidently, or variants not yet classified. A family history of one of these conditions matters more than this result — tell your doctor about it either way.</p>
+        <p>It means none of your small variants (single-letter changes and short insertions/deletions) in these genes is classified pathogenic in ClinVar in a way that meets the reporting rule, and the deletion/duplication scan above found nothing both its methods agree on. Repeat expansions are checked separately below. It does <em>not</em> rule out: copy-number changes in exons the scan couldn’t judge, rearrangements short reads can’t see (inversions, balanced translocations), variants in the few percent of each gene that couldn’t be read confidently, or variants not yet classified. A family history of one of these conditions matters more than this result — tell your doctor about it either way.</p>
       </Explain>
     </Card>
   {/if}

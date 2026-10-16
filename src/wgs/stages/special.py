@@ -49,6 +49,14 @@ STRCHIVE_EVIDENCE = {"Definitive": "Strong", "Strong": "Strong", "Moderate": "Mo
 ADULT_ONSET = 18  # STRchive age_onset_min at or above this → adult-onset → click-to-reveal (AGENTS.md §5.9)
 HLA_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "hla_associations.toml"
 BLOOD_TABLE = Path(__file__).parents[1] / "knowledge" / "data" / "blood_group.toml"
+ACMG_LIST = Path(__file__).parents[1] / "knowledge" / "data" / "acmg_sf_v3.3.csv"
+CNV_PAD = 5_000            # bp around each gene, so deletions that start outside it are seen
+DEPTH_DEL, DEPTH_DUP = 0.65, 1.40   # exon depth / panel median below / above this suggests one copy lost / gained
+SV_COMMON = 0.01           # gnomAD-SV frequency at or above which a copy-number change is common
+GC_MIN, GC_MAX = 0.25, 0.75  # exons outside this GC range have unreliable depth (ADR-021) and give no depth signal
+GC_BIN_MIN = 30            # exons per GC bin; sparse bins are pooled with their neighbours
+DEPTH_Z = 3.0              # a depth signal must also be this many robust SDs from exons of similar GC
+LONG_RUN = 5               # a depth-only run this long (e.g. a whole-gene deletion) is flagged for attention
 HLA_MIN_QUALITY = 20  # T1K allele quality; lower calls are graded Medium
 IUPAC = {"N": "[ACGT]", "R": "[AG]", "Y": "[CT]", "S": "[CG]", "W": "[AT]", "K": "[GT]", "M": "[AC]", "B": "[CGT]",
          "D": "[AGT]", "H": "[ACT]", "V": "[ACG]"}
@@ -82,6 +90,14 @@ def out_blood(ctx: Context) -> Path:
 
 def out_stats(ctx: Context) -> Path:
     return out_dir(ctx) / "genome_stats.json"
+
+
+def out_cnv(ctx: Context) -> Path:
+    return out_dir(ctx) / "cnv_genes.parquet"
+
+
+def out_cnv_events(ctx: Context) -> Path:
+    return out_dir(ctx) / "cnv_events.parquet"
 
 
 def out_summary(ctx: Context) -> Path:
@@ -651,6 +667,319 @@ def blood_claims(rows: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Deletions and duplications in the ACMG genes
+# ---------------------------------------------------------------------------------------------------------------
+
+
+def panel_exons(st: Store) -> list[dict]:
+    """Exons of each ACMG SF gene's MANE Select transcript (else its longest protein-coding transcript, r87)."""
+    import csv
+
+    genes_t, mane_t = st.table("ensembl", "genes"), st.table("mane", "transcripts")
+    gff = st.file("ensembl", "annotation.gff3.gz")
+    if not genes_t or not gff or not ACMG_LIST.exists():
+        return []
+    with open(ACMG_LIST, newline="") as fh:
+        acmg = {r["gene"]: r for r in csv.DictReader(fh)}
+    con = duckdb.connect()
+    con.execute(f"""CREATE TABLE g AS SELECT symbol, gene_id, chrom, start, "end" FROM '{genes_t}'
+        WHERE symbol IN ({",".join(repr(x) for x in acmg)})""")
+    con.execute(f"""CREATE TABLE f AS SELECT column0 AS chrom, column2 AS type, CAST(column3 AS BIGINT) AS start,
+          CAST(column4 AS BIGINT) AS "end", column8 AS attr FROM read_csv('{gff}', delim='\t', header=false,
+          comment='#', all_varchar=true, compression='gzip', quote='', escape='')
+        WHERE column2 IN ('mRNA', 'exon')""")
+    con.execute("""CREATE TABLE tx AS SELECT regexp_extract(attr, 'ID=transcript:(ENST[0-9]+)', 1) AS tx,
+        regexp_extract(attr, 'Parent=gene:(ENSG[0-9]+)', 1) AS gene_id FROM f WHERE type = 'mRNA'
+        AND attr LIKE '%biotype=protein_coding%'""")
+    con.execute("""CREATE TABLE ex AS SELECT regexp_extract(attr, 'Parent=transcript:(ENST[0-9]+)', 1) AS tx, chrom,
+        start, "end", CAST(regexp_extract(attr, 'rank=([0-9]+)', 1) AS INT) AS rank FROM f WHERE type = 'exon'""")
+    mane = f"SELECT transcript FROM '{mane_t}' WHERE status = 'MANE Select'" if mane_t else "SELECT NULL"
+    rows = con.execute(f"""WITH cand AS (
+          SELECT g.symbol, tx.tx, count(*) AS n, bool_or(tx.tx IN ({mane})) AS is_mane
+          FROM g JOIN tx USING (gene_id) JOIN ex USING (tx) GROUP BY ALL),
+        pick AS (SELECT symbol, arg_max(tx, is_mane::INT * 1000000 + n) AS tx, bool_or(is_mane) AS mane
+                 FROM cand GROUP BY 1)
+        SELECT p.symbol, p.tx, p.mane, e.chrom, e.start, e."end", e.rank FROM pick p JOIN ex e USING (tx)
+        ORDER BY p.symbol, e.start""").fetchall()
+    return [{"gene": g, "transcript": t, "mane": m, "chrom": c, "start": a, "end": b, "exon": r,
+             "inheritance": acmg[g]["inheritance"], "condition": acmg[g]["condition"]}
+            for g, t, m, c, a, b, r in rows]
+
+
+def exon_ratios(depths: list[float], chroms: list[str], male: bool) -> list[float | None]:
+    """Each exon's depth over the panel median, with male X/Y exons scaled to their single expected copy."""
+    import statistics
+
+    auto = [d for d, c in zip(depths, chroms, strict=True) if c not in ("X", "Y") and d is not None]
+    med = statistics.median(auto) if auto else None
+    out = []
+    for d, c in zip(depths, chroms, strict=True):
+        if d is None or not med:
+            out.append(None)
+        else:
+            out.append(d / med * (2 if male and c in ("X", "Y") else 1))
+    return out
+
+
+def gc_correct(exons: list[dict]) -> None:
+    """Divide each exon's depth ratio by the median of exons with similar GC content (sequencing under-reads very
+    GC-rich and GC-poor DNA), and record how unusual it is for that GC level as a robust z-score."""
+    import statistics
+
+    usable = [e for e in exons if e.get("ratio") is not None and e.get("gc") is not None]
+    bins: dict[float, list[dict]] = {}
+    for e in usable:
+        bins.setdefault(round(e["gc"] * 20) / 20, []).append(e)
+    keys = sorted(bins)
+    for e in exons:
+        if e.get("ratio") is None or e.get("gc") is None:
+            e.update(gc_ratio=None, gc_ratio_all=None, gc_z=None)
+            continue
+        k = round(e["gc"] * 20) / 20
+        pool, w = list(bins.get(k, [])), 1
+        while len(pool) < GC_BIN_MIN and w <= len(keys):
+            pool = [x for kk in keys if abs(kk - k) <= w * 0.05 + 1e-9 for x in bins[kk]]
+            w += 1
+        med = statistics.median(x["ratio"] for x in pool)
+        med_all = statistics.median(x.get("ratio_all", x["ratio"]) for x in pool)
+        mad = statistics.median(abs(x["ratio"] - med) for x in pool) * 1.4826 or 1e-9
+        e.update(gc_ratio=e["ratio"] / med, gc_ratio_all=(e.get("ratio_all") or e["ratio"]) / med_all,
+                 gc_z=(e["ratio"] - med) / mad)
+
+
+def depth_kind(e: dict) -> str | None:
+    """'DEL' / 'DUP' when an exon's GC-corrected depth is unusual for its GC level and both the unique-read and
+    all-read depth point the same way; None for exons with extreme GC, whose depth is unreliable."""
+    gc = e.get("gc")
+    if gc is not None and not (GC_MIN <= gc <= GC_MAX):
+        return None
+    r = e.get("gc_ratio", e.get("ratio"))
+    ra = e.get("gc_ratio_all", e.get("ratio_all", r))
+    z = e.get("gc_z")
+    if r is None or ra is None:
+        return None
+    if r < DEPTH_DEL and ra < DEPTH_DEL and (z is None or z <= -DEPTH_Z):
+        return "DEL"
+    if r > DEPTH_DUP and ra > DEPTH_DUP and (z is None or z >= DEPTH_Z):
+        return "DUP"
+    return None
+
+
+def depth_runs(exons: list[dict]) -> list[dict]:
+    """Runs of ≥ 2 neighbouring exons in one gene whose depth suggests a lost or gained copy."""
+    runs, cur = [], []
+    for e in exons + [{"gene": None}]:
+        kind = depth_kind(e) if e.get("gene") else None
+        if cur and (kind != cur[-1]["kind"] or e.get("gene") != cur[-1]["gene"]):
+            if len(cur) >= 2:
+                runs.append(cur)
+            cur = []
+        if kind:
+            cur.append({**e, "kind": kind})
+    return [{"gene": r[0]["gene"], "svtype": r[0]["kind"], "chrom": r[0]["chrom"], "start": r[0]["start"],
+             "end": r[-1]["end"], "exons": [x["exon"] for x in r],
+             "mean_ratio": sum(x.get("gc_ratio") or x["ratio"] for x in r) / len(r)} for r in runs]
+
+
+def _delly_calls(ctx: Context, bam: Path, d: Path) -> list[dict]:
+    delly = _tool("delly")
+    if not delly:
+        return []
+    bcf = d / "delly.bcf"
+    run([delly, "call", "-g", str(reference.reference_fasta(ctx)), "-o", str(bcf), str(bam)],
+        log=ctx.logs / "special-cnv.log")
+    if not bcf.exists():
+        return []
+    out = run([shutil.which("bcftools") or "bcftools", "query", "-f",
+               "%CHROM\t%POS\t%INFO/END\t%INFO/SVTYPE\t%FILTER\t[%GT]\t%INFO/PE\t%INFO/SR\n", str(bcf)],
+              capture=True).stdout
+    calls = []
+    for line in out.splitlines():
+        chrom, pos, end, svtype, filt, gt, pe, sr = line.split("\t")
+        if svtype in ("DEL", "DUP") and gt not in ("0/0", "./.") and filt == "PASS":
+            calls.append({"chrom": chrom.removeprefix("chr"), "start": int(pos), "end": int(end), "svtype": svtype,
+                          "gt": gt, "pe": int(pe) if pe.isdigit() else 0, "sr": int(sr) if sr.isdigit() else 0})
+    return calls
+
+
+def _gnomad_sv(con, sv: Path | None, ev_: dict) -> dict | None:
+    """The most similar gnomAD-SV record (same type, ≥ 50% reciprocal overlap)."""
+    if not sv:
+        return None
+    types = ("DEL", "CNV", "MCNV") if ev_["svtype"] == "DEL" else ("DUP", "CNV", "MCNV")
+    row = con.execute(f"""SELECT name, af, popmax_af FROM (
+            SELECT name, af, popmax_af, least("end", ?) - greatest(start, ?) AS ov, "end" - start AS len
+            FROM '{sv}' WHERE chrom = ? AND svtype IN {types} AND filter = 'PASS' AND start < ? AND "end" > ?)
+        WHERE ov >= 0.5 * len AND ov >= 0.5 * (? - ?) ORDER BY ov DESC LIMIT 1""",
+                      [ev_["end"], ev_["start"], ev_["chrom"], ev_["end"], ev_["start"], ev_["end"],
+                       ev_["start"]]).fetchone()
+    return {"id": row[0], "af": row[1], "popmax_af": row[2]} if row else None
+
+
+def classify_cnv(e: dict) -> tuple[str, str, str]:
+    """(status, evidence level, call level) for one candidate deletion or duplication (ADR-021)."""
+    freq = max((e.get("gnomad") or {}).get("popmax_af") or 0, (e.get("gnomad") or {}).get("af") or 0)
+    both = e["delly"] and e["depth_support"]
+    if freq >= SV_COMMON:
+        return "common", "Limited", "High" if both else "Medium"
+    if not e["exons"]:
+        return "no_exon", "Limited", "Medium" if both else "Low"
+    if not both and len(e["exons"]) >= LONG_RUN:
+        return "long_depth_signal", "Limited", "Low"
+    if e["svtype"] == "DEL":
+        return ("possible_exon_deletion" if both else "unconfirmed_signal", "Moderate" if both else "Limited",
+                "Medium" if both else "Low")
+    return ("possible_exon_duplication" if both else "unconfirmed_signal", "Limited", "Medium" if both else "Low")
+
+
+def _panel_cached(d: Path, st: Store) -> list[dict]:
+    """panel_exons() parses the whole Ensembl GFF (minutes on an external drive); cache it per source version."""
+    key = json.dumps({k: (st.current(k) or {}).get("version") for k in ("ensembl", "mane")}
+                     | {"acmg": ACMG_LIST.stat().st_mtime if ACMG_LIST.exists() else None})
+    cache_p, key_p = d / "panel_exons.json", d / "panel_exons.key"
+    if cache_p.exists() and key_p.exists() and key_p.read_text() == key:
+        return json.loads(cache_p.read_text())
+    exons = panel_exons(st)
+    cache_p.write_text(json.dumps(exons))
+    key_p.write_text(key)
+    return exons
+
+
+def _cnv(ctx: Context, d: Path, st: Store) -> tuple[list[dict], list[dict]]:
+    import pysam
+
+    exons = _panel_cached(d, st)
+    aln = ctx.inv.first("cram") or ctx.inv.first("bam")
+    if not exons or not aln:
+        return [], []
+    prefix = "chr" if "chr1" in reference.cram_contigs(ctx) else ""
+    spans: dict[str, list] = {}
+    for e in exons:
+        s_ = spans.setdefault(e["gene"], [e["chrom"], e["start"], e["end"]])
+        s_[1], s_[2] = min(s_[1], e["start"]), max(s_[2], e["end"])
+    bed = d / "cnv_panel.bed"
+    bed.write_text("".join(f"{prefix}{c}\t{max(0, a - CNV_PAD)}\t{b + CNV_PAD}\n" for c, a, b in spans.values()))
+    bam = ctx.scratch / "special-panel.bam"
+    samtools = shutil.which("samtools") or "samtools"
+    run([samtools, "view", "-@", str(min(ctx.threads, 4)), "-b", "-M", "-L", str(bed), "-T",
+         str(reference.reference_fasta(ctx)), "-o", str(bam), str(aln.path)], log=ctx.logs / "special-cnv.log")
+    run([samtools, "index", str(bam)], log=ctx.logs / "special-cnv.log")
+    depths, all_depths = [], []
+    with pysam.AlignmentFile(str(bam), "rb") as af:
+        for e in exons:
+            uniq = every = 0
+            for r in af.fetch(prefix + e["chrom"], e["start"] - 1, e["end"]):
+                if r.is_duplicate or r.is_secondary or r.is_supplementary:
+                    continue
+                ov = max(0, min(r.reference_end or 0, e["end"]) - max(r.reference_start, e["start"] - 1))
+                every += ov
+                uniq += ov if r.mapping_quality >= 20 else 0
+            n = e["end"] - e["start"] + 1
+            depths.append(uniq / n)
+            all_depths.append(every / n)
+    import pysam as _pysam
+
+    with _pysam.FastaFile(str(reference.reference_fasta(ctx))) as fa:
+        for e in exons:
+            name = e["chrom"] if e["chrom"] in fa.references else prefix + e["chrom"]
+            seq = fa.fetch(name, max(0, e["start"] - 51), e["end"] + 50).upper()  # reads overlap the flanks too
+            e["gc"] = (seq.count("G") + seq.count("C")) / max(1, len(seq))
+    male = (_sex(ctx) or "").upper().startswith("XY")
+    chroms = [e["chrom"] for e in exons]
+    for e, r, ra, dp in zip(exons, exon_ratios(depths, chroms, male), exon_ratios(all_depths, chroms, male), depths,
+                            strict=True):
+        # A real copy loss lowers every read; a dip only among uniquely placed reads is a mappability artefact
+        # (e.g. TTN's triplicated I-band exons), so the signal counts only where both depths agree.
+        e.update(ratio=r, ratio_all=ra, depth=dp,
+                 mappable=ra is None or r is None or not ((r < DEPTH_DEL) and ra >= DEPTH_DEL))
+    gc_correct(exons)
+    calls = _delly_calls(ctx, bam, d)
+    for p_ in (bam, Path(str(bam) + ".bai")):
+        p_.unlink(missing_ok=True)
+    sv = st.table("gnomad_sv", "sv")
+    con = duckdb.connect()
+    events = []
+
+    def overlapped(ev_: dict) -> list[dict]:
+        return [e for e in exons
+                if e["chrom"] == ev_["chrom"] and e["start"] <= ev_["end"] and e["end"] >= ev_["start"]]
+
+    for c in calls:
+        hit = overlapped(c)
+        genes = sorted({e["gene"] for e in hit}) or sorted(
+            g for g, (ch, a, b) in spans.items()
+            if ch == c["chrom"] and a - CNV_PAD <= c["end"] and b + CNV_PAD >= c["start"])
+        ratios = [e.get("gc_ratio") or e["ratio"] for e in hit if e["ratio"] is not None]
+        mean = sum(ratios) / len(ratios) if ratios else None
+        kinds = [depth_kind(e) for e in hit]
+        support = bool(kinds) and sum(k == c["svtype"] for k in kinds) >= max(1, len(kinds) // 2)
+        events.append({**c, "genes": genes, "exons": [f"{e['gene']} exon {e['exon']}" for e in hit],
+                       "mean_ratio": mean, "delly": True, "depth_support": bool(support)})
+    for r in depth_runs(exons):
+        if any(ev_["delly"] and ev_["chrom"] == r["chrom"] and ev_["start"] <= r["end"] and ev_["end"] >= r["start"]
+               for ev_ in events):
+            continue
+        events.append({"chrom": r["chrom"], "start": r["start"], "end": r["end"], "svtype": r["svtype"],
+                       "gt": None, "pe": 0, "sr": 0, "genes": [r["gene"]],
+                       "exons": [f"{r['gene']} exon {x}" for x in r["exons"]], "mean_ratio": r["mean_ratio"],
+                       "delly": False, "depth_support": True})
+    for ev_ in events:
+        ev_["gnomad"] = _gnomad_sv(con, sv, ev_)
+        ev_["status"], ev_["evidence_level"], ev_["call_level"] = classify_cnv(ev_)
+        ev_["overall"] = ev.overall(ev_["evidence_level"], ev_["call_level"])
+        ev_["event_id"] = f"{ev_['svtype']}:{ev_['chrom']}:{ev_['start']}-{ev_['end']}"
+        ev_["gnomad"] = json.dumps(ev_["gnomad"]) if ev_["gnomad"] else None
+    genes = []
+    for g in spans:
+        ex = [e for e in exons if e["gene"] == g]
+        rs = [e["ratio"] for e in ex if e["ratio"] is not None]
+        mine = [ev_ for ev_ in events if g in ev_["genes"]]
+        genes.append({"gene": g, "transcript": ex[0]["transcript"], "mane": ex[0]["mane"], "exons": len(ex),
+                      "min_ratio": min(rs) if rs else None, "max_ratio": max(rs) if rs else None,
+                      "condition": ex[0]["condition"], "inheritance": ex[0]["inheritance"],
+                      "events": len(mine), "status": "event" if any(e_["status"].startswith("possible") for e_ in mine)
+                      else "signal" if mine else "none",
+                      "exon_ratios": json.dumps([round(e["ratio"], 3) if e["ratio"] is not None else None
+                                                 for e in ex]),
+                      "low_mappability_exons": sum(not e["mappable"] for e in ex),
+                      "extreme_gc_exons": sum(e.get("gc") is not None and not (GC_MIN <= e["gc"] <= GC_MAX)
+                                              for e in ex)})
+    return genes, events
+
+
+def cnv_claims(events: list[dict]) -> list[dict]:
+    out = []
+    for e in events:
+        if not e["status"].startswith("possible"):
+            continue
+        dele = e["svtype"] == "DEL"
+        gene = e["genes"][0] if e["genes"] else None
+        out.append({
+            "claim_id": f"special:cnv:{e['event_id']}", "section": "health", "group": "cnv", "kind": "copy_number",
+            "category": "predicted", "category_label": "Possible deletion" if dele else "Possible duplication",
+            "subject": ", ".join(e["exons"][:4]) + ("…" if len(e["exons"]) > 4 else ""), "gene": gene,
+            "chrom": e["chrom"], "pos": e["start"],
+            "statement": (f"Two independent signals suggest a {'deletion' if dele else 'duplication'} covering "
+                          f"{len(e['exons'])} exon{'s' if len(e['exons']) != 1 else ''} of {gene} "
+                          f"({e['chrom']}:{e['start']:,}–{e['end']:,}). Copy-number changes from short reads need "
+                          "confirmation with a clinical test (MLPA or a chromosomal microarray)"),
+            "evidence_level": e["evidence_level"],
+            "evidence_reasons": ["Not seen in gnomAD-SV at ≥ 1%", "No lab has classified this exact change; losing "
+                                 "exons of a gene where one broken copy causes disease is often disease-causing"],
+            "call_level": e["call_level"],
+            "call_reasons": [f"Delly found {e['pe']} spanning read pairs and {e['sr']} split reads",
+                             f"Exon read depth is {e['mean_ratio']:.2f}× the panel median" if e["mean_ratio"] else ""],
+            "overall": e["overall"], "sensitive": True,
+            "sources": json.dumps([{"source": "Delly", "version": None, "record": "Rausch T, et al. Bioinformatics. "
+                                    "2012;28:i333-i339", "url": PMID.format("22962449")},
+                                   {"source": "gnomAD-SV v2.1", "version": "2.1",
+                                    "record": "Collins RL, et al. Nature. 2020;581:444-451",
+                                    "url": PMID.format("32461652")}]),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # How your genome compares
 # ---------------------------------------------------------------------------------------------------------------
 
@@ -800,12 +1129,24 @@ def _special(ctx: Context) -> dict:
         blood = []
     _write(blood, out_blood(ctx), "system")
     write_json(out_stats(ctx), genome_stats(ctx))
+    try:
+        cnv_genes, cnv_events = _cnv(ctx, d, st)
+    except Exception as e:
+        summary["errors"].append(f"copy number: {e}")
+        cnv_genes, cnv_events = [], []
+    for e in cnv_events:
+        e["genes"], e["exons"] = list(e["genes"]), list(e["exons"])
+    _write(cnv_genes, out_cnv(ctx), "gene")
+    _write(cnv_events, out_cnv_events(ctx), "event_id")
+    summary["cnv"] = {"genes": len(cnv_genes), "exons": sum(g["exons"] for g in cnv_genes),
+                      "events": {s_: sum(e["status"] == s_ for e in cnv_events)
+                                 for s_ in sorted({e["status"] for e in cnv_events})}}
     summary["repeats"] = {s: sum(r["status"] == s for r in repeats) for s in sorted({r["status"] for r in repeats})}
     summary["knowledge"] = {"strchive": (st.current("strchive") or {}).get("version")}
     _write(genes, out_genes(ctx), "gene")
     _write(repeats, out_repeats(ctx), "locus_id")
-    _write(gene_claims(genes) + repeat_claims(repeats) + hla_claims(hla) + blood_claims(blood), out_claims(ctx),
-           "claim_id")
+    _write(gene_claims(genes) + repeat_claims(repeats) + hla_claims(hla) + blood_claims(blood)
+           + cnv_claims(cnv_events), out_claims(ctx), "claim_id")
     write_json(out_summary(ctx), summary)
     return {"genes": {g["gene"]: g["status"] for g in genes}, "repeats": summary["repeats"],
             "errors": summary["errors"]}
@@ -835,9 +1176,9 @@ def _params(ctx: Context) -> dict:
 
 
 STAGE = Stage(
-    name="special", version="3", title="Specialised callers (SMN1, GBA1, repeats, HLA, blood group)", fn=_special,
+    name="special", version="4", title="Specialised callers (SMN1, GBA1, repeats, HLA, blood group)", fn=_special,
     inputs=_inputs,
-    outputs=lambda ctx: [out_genes(ctx), out_repeats(ctx), out_hla(ctx), out_blood(ctx), out_claims(ctx),
-                         out_stats(ctx), out_summary(ctx)],
+    outputs=lambda ctx: [out_genes(ctx), out_repeats(ctx), out_hla(ctx), out_blood(ctx), out_cnv(ctx),
+                         out_cnv_events(ctx), out_claims(ctx), out_stats(ctx), out_summary(ctx)],
     available=_available, params=_params,
 )

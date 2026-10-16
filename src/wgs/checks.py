@@ -222,6 +222,18 @@ CHECKS: list[Check] = [
           "position was readable, and the result must cite the studies behind the rule.", ("blood_group",),
           """SELECT system FROM blood_group WHERE coalesce(json_array_length(quotes), 0) = 0
              OR (result IS NULL) <> (call_level = 'Not callable')"""),
+    Check("cnv.two_signals", "A deletion or duplication is only reported as possible when two methods agree",
+          "Read depth alone dips at GC-rich, GC-poor and hard-to-map exons; a reported copy-number change needs "
+          "breakpoint reads (Delly) and a GC-corrected depth drop, and must not be common in gnomAD-SV (ADR-021).",
+          ("cnv_events",),
+          """SELECT event_id FROM cnv_events WHERE status IN ('possible_exon_deletion', 'possible_exon_duplication')
+             AND NOT (delly AND depth_support)"""),
+    Check("cnv.findings_are_claims", "Every possible deletion or duplication is also a graded finding",
+          "A copy-number change in an ACMG gene must appear on the Health page, not only in the scan table.",
+          ("cnv_events", "claims"),
+          """SELECT e.event_id FROM cnv_events e WHERE e.status IN ('possible_exon_deletion',
+             'possible_exon_duplication') AND NOT EXISTS (SELECT 1 FROM claims c
+             WHERE c.claim_id = 'special:cnv:' || e.event_id)"""),
     Check("pgs.genotype_calibration", "You are rarely called 'reference' where almost everyone carries the other "
           "allele", "At sites where >99% of the panel carries the alternate allele, a reference call should be rare "
           "(<2%); more means calls are being made wrongly — an indel-spelling mismatch once did this to 18% of "
