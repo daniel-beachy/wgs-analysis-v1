@@ -177,7 +177,8 @@ def _brain(ctx: Context) -> list[dict]:
     ann = annotate.annotations_path(ctx)
     con = duckdb.connect()
     rows = con.execute(f"""SELECT a.chrom, a.pos, a.rsid, a.ref, a.alt, a.gene, a.zygosity, a.gt, a.gq,
-            a.consequence, a.impact, a.aa_change, a.am_score, a.revel, a.loeuf, a.gnomad_popmax_af, a.af_1kg,
+            a.consequence, a.impact, a.aa_change, a.am_score, a.revel, a.loeuf, a.gnomad_popmax_af,
+            coalesce(a.gnomad_filtered, false) AS gnomad_filtered, a.af_1kg,
             a.clinvar_id, a.clinvar_significance, a.clinvar_stars,
             s.score AS sfari_score, s.syndromic, s.category, s.reports
         FROM '{ann}' a JOIN '{genes}' s ON s.gene = a.gene
@@ -190,10 +191,8 @@ def _brain(ctx: Context) -> list[dict]:
         level, reasons = ev.predicted_evidence(
             consequence=r["consequence"], am_score=r["am_score"], revel=r["revel"], loeuf=r["loeuf"],
             popmax_af=r["gnomad_popmax_af"], kg_af=r["af_1kg"], recessive_gene=False,
-            clinvar=annotate._clinvar_label(r))
-        afs = [a for a in (r["gnomad_popmax_af"], r["af_1kg"]) if a is not None]
-        rare = not afs or max(afs) < ev.PREDICTED_MAX_AF
-        if not rare:
+            clinvar=annotate._clinvar_label(r), gnomad_filtered=r["gnomad_filtered"])
+        if not ev.is_rare(r["gnomad_popmax_af"], r["af_1kg"], r["gnomad_filtered"]):
             continue
         sources = [{"source": "sfari", "version": versions.get("sfari"), "record": r["gene"],
                     "url": f"https://gene.sfari.org/database/human-gene/{r['gene']}"},
@@ -247,7 +246,7 @@ def _inputs(ctx: Context) -> list[Path]:
 
 
 STAGE = Stage(
-    name="traits", version="3", title="Traits (GWAS single variants) and brain-development genes", fn=_run,
+    name="traits", version="4", title="Traits (GWAS single variants) and brain-development genes", fn=_run,
     inputs=_inputs, params=lambda ctx: {"evidence_model": ev.MODEL_VERSION},
     outputs=lambda ctx: [out_snps(ctx), out_brain(ctx), out_summary(ctx)], available=_available,
 )

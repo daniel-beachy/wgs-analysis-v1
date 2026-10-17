@@ -24,6 +24,12 @@ class Check:
     sql: str  # returns one row per violation; first column is a short label for that row
 
 
+# The highest population frequency a grade may use: gnomAD's only where gnomAD's own calls passed its quality checks
+# (evidence.population_afs, ADR-023 addendum).
+USABLE_AF = ("greatest(coalesce(af_1kg, 0), CASE WHEN coalesce(gnomad_filtered, false) THEN 0 "
+             "ELSE coalesce(gnomad_popmax_af, 0) END)")
+
+
 CHECKS: list[Check] = [
     Check("claims.sourced", "Every finding names its source, evidence grade and call confidence",
           "A claim without a source or grade can't be judged or refreshed.", ("claims",),
@@ -38,10 +44,9 @@ CHECKS: list[Check] = [
     Check("claims.common_is_limited", "Disease findings for common variants are graded Limited",
           "A variant carried by more than 5% of some population can't on its own cause a rare disease (ACMG BA1).",
           ("claims",),
-          """SELECT coalesce(gene, rsid, claim_id) FROM claims
+          f"""SELECT coalesce(gene, rsid, claim_id) FROM claims
              WHERE category IN ('pathogenic', 'likely_pathogenic', 'conflicting', 'predicted')
-               AND greatest(coalesce(af_1kg, 0), coalesce(gnomad_popmax_af, 0)) >= 0.05
-               AND evidence_level <> 'Limited'"""),
+               AND {USABLE_AF} >= 0.05 AND evidence_level <> 'Limited'"""),
     Check("claims.exact_record", "Every finding links to its exact source record, not just a website",
           "A link to a database's home page can't be checked; each claim must point at the record it came from.",
           ("claims",),
@@ -52,9 +57,29 @@ CHECKS: list[Check] = [
     Check("claims.ba1_role", "Common variants never get a carrier or affected label",
           "An allele carried by 5% or more of a population can't cause a rare disease on its own (ACMG/AMP BA1); "
           "only expert-panel (3★+) ClinVar records, which already weighed frequency, are exempt.", ("claims",),
-          """SELECT coalesce(gene, rsid, claim_id) FROM claims
+          f"""SELECT coalesce(gene, rsid, claim_id) FROM claims
              WHERE role IN ('carrier', 'affected', 'possible') AND coalesce(clinvar_stars, 0) < 3
-               AND greatest(coalesce(af_1kg, 0), coalesce(gnomad_popmax_af, 0)) >= 0.05"""),
+               AND {USABLE_AF} >= 0.05"""),
+    Check("annotations.gnomad_flag_read", "gnomAD's own quality flag was read wherever its frequency is used",
+          "gnomAD flags sites where its calls failed its quality checks; on HG002 most calls there were not real "
+          "(ADR-023). A frequency whose flag wasn't read could be one of those and still drive a grade.",
+          ("annotations",),
+          """SELECT count(*) FILTER (WHERE gnomad_filtered IS NULL) || ' of ' || count(*)
+                    || ' alleles with a gnomAD frequency have no flag status; '
+                    || count(*) FILTER (WHERE gnomad_filtered) || ' flagged'
+             FROM annotations WHERE gnomad_popmax_af IS NOT NULL
+             HAVING count(*) FILTER (WHERE gnomad_filtered IS NULL) > 0
+                 OR (count(*) >= 100000 AND count(*) FILTER (WHERE gnomad_filtered) = 0)"""),
+    Check("claims.gnomad_flag_not_graded", "A frequency gnomAD flagged never makes a finding 'too common' or 'rare'",
+          "Where gnomAD's own calls failed its quality checks, its frequency is shown but unknown for grading: it "
+          "can't trigger ACMG BA1/BS1, carrier labels being withheld, or the rarity a computer prediction needs.",
+          ("claims",),
+          """SELECT coalesce(gene, rsid, claim_id) FROM claims WHERE coalesce(gnomad_filtered, false) AND (
+               ((role = 'common' OR CAST(evidence_reasons AS VARCHAR) LIKE '%ACMG BA1%') AND coalesce(af_1kg, 0) < 0.05)
+               OR (CAST(evidence_reasons AS VARCHAR) LIKE '%ACMG BS1%' AND coalesce(af_1kg, 0) < 0.01)
+               OR regexp_matches(CAST(evidence_reasons AS VARCHAR),
+                                 'Rare in gnomAD|seen in (1000 Genomes or gnomAD|gnomAD or 1000)')
+               OR (category = 'predicted' AND af_1kg IS NULL))"""),
     Check("claims.no_rarer_allele_text", "No finding blames 'the rarer allele' when yours is the common one",
           "This wording was wrong for variants where the reference genome carries the rare version.", ("claims",),
           """SELECT claim_id FROM claims WHERE statement ILIKE '%rarer allele%' OR role_reason ILIKE '%rarer allele%'
@@ -73,6 +98,11 @@ CHECKS: list[Check] = [
           "behind it (SFARI Gene, gnomAD, ClinVar when classified).", ("brain_variants",),
           """SELECT gene || ' ' || chrom || ':' || pos FROM brain_variants
              WHERE sources IS NULL OR sources IN ('', '[]')"""),
+    Check("brain.gnomad_flag_not_rare", "Brain & mind variants are listed as rare only where rarity was measured",
+          "A variant whose only frequency is one gnomAD flagged as failing its quality checks isn't known to be rare.",
+          ("brain_variants",),
+          """SELECT gene || ' ' || chrom || ':' || pos FROM brain_variants
+             WHERE coalesce(gnomad_filtered, false) AND af_1kg IS NULL"""),
     Check("traits.sourced", "Every trait variant names its GWAS study and paper",
           "A trait association must point at the study (GCST) and publication it came from.", ("trait_snps",),
           "SELECT rsid FROM trait_snps WHERE study IS NULL OR pmid IS NULL"),

@@ -47,6 +47,8 @@ th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .pill.warn, .pill.partial { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
 .pill.fail, .pill.unavailable { color: var(--bad); background: color-mix(in srgb, var(--bad) 15%, transparent); }
 .pill.soon { color: var(--muted); }
+/* gnomAD flagged its own calls at this site: the frequency is shown but not graded (ADR-023 addendum) */
+.gnflag { color: var(--warn); }
 .kpi { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lead { font-size: 1.05rem; color: var(--muted); max-width: 70ch; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; min-width: 0; }

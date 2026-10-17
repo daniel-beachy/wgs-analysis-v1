@@ -280,7 +280,7 @@
           {:else}
             <p>Not seen in 1000 Genomes (2,504 people){a.gnomad_popmax_af == null ? ' — either very rare, or in a region that panel couldn’t measure.' : '.'}</p>
           {/if}
-          {#if a.gnomad_popmax_af != null}<p class="small faint">gnomAD (≈140,000 people): highest frequency in any one population is {pct(a.gnomad_popmax_af)}.</p>{/if}
+          {#if a.gnomad_popmax_af != null}<p class="small faint">gnomAD (≈140,000 people): highest frequency in any one population is {pct(a.gnomad_popmax_af)}.{#if a.gnomad_filtered}{' '}<span class="gnflag"><Term t="gnomAD flag" label="gnomAD flagged this site" /></span>: its own calls here failed its quality checks, so this number is shown but not used to grade anything.{/if}</p>{/if}
 
           <h4>What ClinVar says</h4>
           {#if a.clinvar_class}

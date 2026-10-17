@@ -150,7 +150,7 @@
                   {#if r.chrom}<div><div class="faint">About the variant</div><ul>
                     <li>{consequenceLabel(r.consequence)}{r.aa_change ? ` (${aaShort(r.aa_change)})` : ''}{r.impact ? ` · ${r.impact.toLowerCase()} impact` : ''}{r.transcript ? ` · on ${r.refseq ?? r.transcript} (${r.transcript_basis ?? 'transcript'})` : ''}</li>
                     {#if r.inheritance}<li>Inheritance: {r.inheritance.split('/').map((x: string) => INH[x] ?? x).join(', ')}{r.inheritance_basis === 'gene' ? ' (from the gene’s known diseases)' : ''}{r.gene_validity ? ` · gene–disease link: ${r.gene_validity}` : ''}</li>{/if}
-                    <li>Frequency: {r.af_1kg != null ? `${pct(r.af_1kg)} of chromosomes (1000 Genomes)` : 'not in 1000 Genomes'}{r.gnomad_popmax_af != null ? ` · up to ${pct(r.gnomad_popmax_af)} in a gnomAD population` : ''}</li>
+                    <li>Frequency: {r.af_1kg != null ? `${pct(r.af_1kg)} of chromosomes (1000 Genomes)` : 'not in 1000 Genomes'}{r.gnomad_popmax_af != null ? ` · up to ${pct(r.gnomad_popmax_af)} in a gnomAD population` : ''}{#if r.gnomad_filtered}{' · '}<span class="gnflag"><Term t="gnomAD flag" label="gnomAD flagged this site" /></span> (not used for the grade){/if}</li>
                   </ul></div>{/if}
                 </div>
                 {#if json(r.submitters).length}

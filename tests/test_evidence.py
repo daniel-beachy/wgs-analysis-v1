@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import duckdb
@@ -121,3 +122,47 @@ def test_conflict_and_condition_text_is_stable():
     assert _conflicts("Pathogenic(2)|Likely_pathogenic(1)") == "Pathogenic 2, Likely pathogenic 1"
     assert _conflicts("Pathogenic (2)|Likely pathogenic (1)") == "Pathogenic 2, Likely pathogenic 1"
     assert _conditions("B disease|a disease|not provided") == _conditions("a disease|B disease")
+
+
+def test_gnomad_flagged_frequency_is_unknown_for_grading():
+    # gnomAD v2.1.1 flags sites whose calls failed its own QC; on HG002 only 3 of 13 calls there were real (ADR-023).
+    # Such a frequency (often ~50% at a look-alike copy) must not make a variant "too common" or "rare".
+    assert ev.too_common(popmax_af=0.44, kg_af=None, stars=1, gnomad_filtered=True) is None
+    assert ev.too_common(popmax_af=0.44, kg_af=0.06, stars=1, gnomad_filtered=True).startswith("Carried on up to 6%")
+    level, reasons = ev.clinvar_evidence(2, "pathogenic", popmax_af=0.44, gnomad_filtered=True)
+    assert level == "Moderate" and not any("BA1" in r or "Not seen" in r for r in reasons)
+    assert any(r.startswith("gnomAD flagged this site") and "44.0%" in r for r in reasons)
+    level, reasons = ev.clinvar_evidence(2, "pathogenic", popmax_af=0.00001, gnomad_filtered=True)
+    assert not any(r.startswith("Rare in gnomAD") for r in reasons)
+    assert ev.clinvar_evidence(2, "pathogenic", popmax_af=0.44, kg_af=0.02, gnomad_filtered=True)[0] == "Limited"
+    kw = dict(consequence="missense", am_score=0.9, revel=0.95, loeuf=None, recessive_gene=False)
+    assert ev.predicted_evidence(**kw, popmax_af=0.00001, kg_af=None, gnomad_filtered=True) == (None, [])
+    level, reasons = ev.predicted_evidence(**kw, popmax_af=0.44, kg_af=0.0002, gnomad_filtered=True)
+    assert level == "Limited" and any(r.startswith("gnomAD flagged") for r in reasons)
+    assert ev.is_rare(None, None) and not ev.is_rare(0.00001, None, True) and ev.is_rare(0.44, 0.0002, True)
+
+
+def test_annotate_reads_gnomad_flag(tmp_path):
+    """The flag slivar adds where gnomAD failed a site reaches the annotations as gnomad_filtered."""
+    from wgs.stages.annotate import GNOMAD_FLAG, _alt_is_major, _gnomad_select, _has_info, _query_format, _raw_columns
+    vcf = tmp_path / "g.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n##contig=<ID=chr7>\n"
+                   '##INFO=<ID=gnomad_popmax_af,Number=1,Type=Float,Description="x">\n'
+                   f'##INFO=<ID={GNOMAD_FLAG},Number=0,Type=Flag,Description="x">\n'
+                   "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+                   f"chr7\t100\t.\tC\tA\t.\t.\tgnomad_popmax_af=0.44;{GNOMAD_FLAG}\n"
+                   "chr7\t200\t.\tG\tA\t.\t.\tgnomad_popmax_af=0.2\n"
+                   "chr7\t300\t.\tG\tA\t.\t.\tgnomad_popmax_af=-1\n")   # slivar: not in gnomAD
+    assert _has_info(vcf, GNOMAD_FLAG)
+    fields = ["gnomad_popmax_af"]
+    tsv = tmp_path / "q.tsv"
+    tsv.write_text(subprocess.run(["bcftools", "query", "-f", _query_format(False, fields, True), str(vcf)],
+                                  capture_output=True, text=True, check=True).stdout)
+    con = duckdb.connect()
+    con.execute(f"CREATE TABLE r AS SELECT * FROM read_csv('{tsv}', delim='\t', header=false, quote='', "
+                f"columns={json.dumps(_raw_columns(fields, True))})")
+    rows = con.execute(f"SELECT pos, {_gnomad_select(fields, True)} FROM r ORDER BY pos").fetchall()
+    assert rows == [(100, 0.44, True), (200, 0.2, False), (300, None, False)]
+    no_flag = con.execute(f"SELECT {_gnomad_select(fields, False)} FROM r LIMIT 1").fetchone()
+    assert no_flag[-1] is None                       # a gnomAD file without the flag: status unknown, not "passed"
+    assert _alt_is_major({"af_1kg": None, "gnomad_popmax_af": 0.7, "gnomad_filtered": True}) is None

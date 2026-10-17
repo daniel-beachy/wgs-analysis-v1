@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 
-MODEL_VERSION = "4"
+MODEL_VERSION = "5"  # 5: frequencies gnomAD flagged are not used for grading (ADR-023 addendum)
 
 EVIDENCE = ["Limited", "Moderate", "Strong"]
 CALL = ["Not callable", "Low", "Medium", "High"]
@@ -57,14 +57,36 @@ BS1_AF = 0.01
 DISEASE_CLASSES = {"pathogenic", "likely_pathogenic"}
 
 
-def too_common(*, popmax_af: float | None, kg_af: float | None, stars: int | None) -> str | None:
+def population_afs(popmax_af: float | None, kg_af: float | None, gnomad_filtered: bool = False) -> list[float]:
+    """The frequencies a grade may rest on (model 5, ADR-023 addendum). Where gnomAD flagged its own calls at a site
+    as failing its quality checks, its frequency there is unknown, not high or low: on Genome in a Bottle's HG002,
+    most calls at such sites were not real variants. 1000 Genomes still counts."""
+    return [a for a in (None if gnomad_filtered else popmax_af, kg_af) if a is not None]
+
+
+def is_rare(popmax_af: float | None, kg_af: float | None, gnomad_filtered: bool = False) -> bool:
+    """Below PREDICTED_MAX_AF everywhere it was measured, or seen nowhere. A gnomAD-flagged site with no 1000 Genomes
+    frequency is neither: its frequency is unknown, so rare-variant rules don't apply."""
+    afs = population_afs(popmax_af, kg_af, gnomad_filtered)
+    return max(afs) < PREDICTED_MAX_AF if afs else not gnomad_filtered
+
+
+def gnomad_flag_reason(popmax_af: float | None) -> str:
+    shown = f" (up to {popmax_af:.1%} in a population)" if popmax_af is not None else ""
+    return (f"gnomAD flagged this site: its own calls here failed its quality checks, so its frequency{shown} is "
+            "not used for this grade")
+
+
+def too_common(*, popmax_af: float | None, kg_af: float | None, stars: int | None,
+               gnomad_filtered: bool = False) -> str | None:
     """ACMG/AMP BA1: an allele at ≥5% in a population is too common to cause a rare Mendelian disease on its own.
 
     Returns the reason when BA1 applies, so carrier/affected labels are withheld. Expert-panel (3★+) ClinVar
-    classifications already weighed frequency (ClinGen's BA1 exceptions such as HFE C282Y), so they are kept."""
+    classifications already weighed frequency (ClinGen's BA1 exceptions such as HFE C282Y), so they are kept.
+    A frequency gnomAD flagged doesn't count (``population_afs``)."""
     if int(stars or 0) >= 3:
         return None
-    af = max([a for a in (popmax_af, kg_af) if a is not None], default=None)
+    af = max(population_afs(popmax_af, kg_af, gnomad_filtered), default=None)
     if af is None or af < BA1_AF:
         return None
     share = "over 99%" if af >= 0.995 else f"{af:.0%}"
@@ -77,7 +99,8 @@ def _down(level: str, steps: int = 1) -> str:
 
 
 def clinvar_evidence(stars: int, sig_class: str, *, popmax_af: float | None = None, kg_af: float | None = None,
-                     gene_validity: str | None = None, low_penetrance: bool = False) -> tuple[str, list[str]]:
+                     gene_validity: str | None = None, low_penetrance: bool = False,
+                     gnomad_filtered: bool = False) -> tuple[str, list[str]]:
     """Evidence strength for a ClinVar assertion, with reasons (positive reasons first)."""
     stars = int(stars or 0)
     level = STARS_TO_EVIDENCE.get(stars, "Limited")
@@ -90,7 +113,7 @@ def clinvar_evidence(stars: int, sig_class: str, *, popmax_af: float | None = No
         level = "Limited"
         reasons.append("Labs disagree about this variant (conflicting classifications)")
     if sig_class in DISEASE_CLASSES:
-        af = max([a for a in (popmax_af, kg_af) if a is not None], default=None)
+        af = max(population_afs(popmax_af, kg_af, gnomad_filtered), default=None)
         if af is not None and af >= BA1_AF:
             level = "Limited"
             reasons.append(f"Common in healthy people (up to {af:.1%}) — too common to cause a rare disease on its "
@@ -98,10 +121,12 @@ def clinvar_evidence(stars: int, sig_class: str, *, popmax_af: float | None = No
         elif af is not None and af >= BS1_AF:
             level = _down(level)
             reasons.append(f"More common than expected for a rare disease variant ({af:.1%}; ACMG BS1)")
-        elif popmax_af is not None:
+        elif popmax_af is not None and not gnomad_filtered:
             reasons.append(f"Rare in gnomAD (max {popmax_af:.3%} in any population), consistent with disease")
-        elif kg_af is None:
+        elif kg_af is None and not gnomad_filtered:
             reasons.append("Not seen in 1000 Genomes or gnomAD")
+        if gnomad_filtered:
+            reasons.append(gnomad_flag_reason(popmax_af))
         if gene_validity:
             rank = GENE_VALIDITY_RANK.get(gene_validity)
             if rank is not None and rank <= 1:
@@ -308,14 +333,16 @@ def acmg_reportable(rule: str | None, *, copies: int, zygosity: str | None, cons
 
 def predicted_evidence(*, consequence: str | None, am_score: float | None, revel: float | None,
                        loeuf: float | None, popmax_af: float | None, kg_af: float | None,
-                       recessive_gene: bool, clinvar: str | None = None) -> tuple[str | None, list[str]]:
+                       recessive_gene: bool, clinvar: str | None = None,
+                       gnomad_filtered: bool = False) -> tuple[str | None, list[str]]:
     """Grade a computational prediction for a rare, unclassified variant. Returns (None, []) if not flagged.
 
     Only flags variants where predictors agree or are calibrated to strong evidence, so the list stays short
-    enough to be worth reading. Never above Limited: predictions are not clinical classifications."""
-    afs = [a for a in (popmax_af, kg_af) if a is not None]
-    if afs and max(afs) >= PREDICTED_MAX_AF:
+    enough to be worth reading. Never above Limited: predictions are not clinical classifications. A variant whose
+    only frequency is one gnomAD flagged isn't known to be rare, so it isn't flagged (``is_rare``)."""
+    if not is_rare(popmax_af, kg_af, gnomad_filtered):
         return None, []
+    afs = population_afs(popmax_af, kg_af, gnomad_filtered)
     reasons: list[str] = []
     flagged = False
     if is_lof(consequence):
@@ -346,6 +373,8 @@ def predicted_evidence(*, consequence: str | None, am_score: float | None, revel
         return None, []
     reasons.append("Rare: " + (f"at most {max(afs):.3%} in any population" if afs else "not seen in gnomAD or 1000 "
                                                                                         "Genomes"))
+    if gnomad_filtered:
+        reasons.append(gnomad_flag_reason(popmax_af))
     if clinvar:
         reasons.append(f"ClinVar: {clinvar}, i.e. labs have not settled whether it causes disease; the "
                        "computer prediction is capped at Limited evidence")

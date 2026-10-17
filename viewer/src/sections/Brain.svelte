@@ -69,7 +69,7 @@
                 <td><strong>{b.gene}</strong><div class="mono faint">{b.rsid ?? `${b.chrom}:${b.pos}`} · {b.zygosity === 'hom' ? 'both copies' : 'one copy'}</div></td>
                 <td>{consequenceLabel(b.consequence)}{b.aa_change ? ` (${aaShort(b.aa_change)})` : ''}</td>
                 <td>{b.sfari_score ? `${b.sfari_score} — ${SFARI[String(b.sfari_score)] ?? ''}` : '—'}{b.syndromic ? ' · syndromic' : ''}</td>
-                <td title="Highest frequency in any gnomAD population">{b.gnomad_popmax_af != null ? pct(b.gnomad_popmax_af) : b.af_1kg != null ? pct(b.af_1kg) : 'not seen in reference data'}</td>
+                <td title="Highest frequency in any gnomAD population, else 1000 Genomes">{b.gnomad_popmax_af != null && !b.gnomad_filtered ? pct(b.gnomad_popmax_af) : b.af_1kg != null ? pct(b.af_1kg) : 'not seen in reference data'}{#if b.gnomad_filtered}<div class="small gnflag"><Term t="gnomAD flag" label="gnomAD flagged this site" />{b.gnomad_popmax_af != null ? ` (${pct(b.gnomad_popmax_af)}, not used)` : ''}</div>{/if}</td>
                 <td>{#if b.evidence_level}<span class="pill {OVERALL_PILL[b.evidence_level]}">{b.evidence_level}</span>{:else}<span class="faint">not flagged</span>{/if}</td>
               </tr>
               {#if open === key(b)}

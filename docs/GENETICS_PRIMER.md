@@ -287,6 +287,7 @@ Everyone has around 100 high-impact variants. Most are in genes that can tolerat
 
 - **Allele frequency (AF):** how common a variant is in a population database. This project uses **1000 Genomes** (2,504 people from 26 populations, with a per-continent breakdown) and **gnomAD** (about 140,000 people). gnomAD's **popmax** is the highest frequency in any single population. Something carried by 5% of healthy people can't cause a rare severe disease, so frequency is one of the strongest filters.
 - **Common** ≈ AF > 1%, **rare** < 1%, **ultra-rare/novel** = absent from gnomAD.
+- **Flagged sites:** gnomAD marks sites where its own calls failed its quality checks, often because reads from a look-alike copy of the region were placed there. Its frequency at such a site is shown, labelled "gnomAD flagged this site", but never used to grade a finding: it can't make a variant count as common, or as rare.
 
 ### Risk numbers: relative vs absolute
 
@@ -443,6 +444,7 @@ What this project measures on HG002 (ADR-023). Genome in a Bottle also shares HG
 | **Genotype (GT)** | Which versions you carry at a position, one per copy: `0/0`, `0/1`, `1/1`… (0 = reference, 1 = variant) |
 | **GIAB / HG002** | Genome in a Bottle; a benchmark person with a "truth" genome |
 | **gnomAD** | Large public database of population allele frequencies |
+| **gnomAD flag (flagged site)** | A site where gnomAD's own calls failed its quality checks, often reads from a look-alike copy; its frequency there is shown but not used for grading |
 | **GQ** | Genotype quality (Phred-scaled) |
 | **gVCF** | A VCF that also lists reference-matching blocks (yours is *not* a gVCF) |
 | **Haplogroup** | Branch of the maternal (mtDNA) or paternal (Y) lineage tree |

@@ -56,6 +56,40 @@ def test_checks_catch_the_bugs_they_were_written_for(tmp_path):
     assert r["counts"]["fail"] == 6
 
 
+def test_gnomad_flagged_frequency_checks(tmp_path):
+    """A frequency gnomAD flagged as failing its own QC is shown but never graded (ADR-023 addendum)."""
+    ok = {"claim_id": "a", "gene": "X1", "rsid": None, "category": "pathogenic", "role": "carrier", "clinvar_stars": 2,
+          "af_1kg": None, "gnomad_popmax_af": 0.44, "gnomad_filtered": True, "evidence_level": "Moderate",
+          "evidence_reasons": ["ClinVar 2★", "gnomAD flagged this site: its frequency is not used for this grade"]}
+    common = {"claim_id": "b", "gene": "X2", "rsid": "rs1", "category": "pathogenic", "role": "common",
+              "clinvar_stars": 1, "af_1kg": 0.08, "gnomad_popmax_af": 0.1, "gnomad_filtered": False,
+              "evidence_level": "Limited",
+              "evidence_reasons": ["Common in healthy people (up to 10.0%) (ACMG BA1)"]}
+    st = _status(checks.run({"claims": _parquet(tmp_path, "claims", [ok, common])}))
+    for cid in ("claims.common_is_limited", "claims.ba1_role", "claims.gnomad_flag_not_graded"):
+        assert st[cid] == "pass", cid
+    # What the old grading did: the flagged 44% made the variant "too common" (BA1).
+    old = ok | {"role": "common", "evidence_level": "Limited",
+                "evidence_reasons": ["Common in healthy people (up to 44.0%) (ACMG BA1)"]}
+    pred = ok | {"claim_id": "c", "category": "predicted", "role": "possible", "evidence_level": "Limited",
+                 "gnomad_popmax_af": 0.00001, "evidence_reasons": ["Rare: at most 0.001% in any population"]}
+    r = checks.run({"claims": _parquet(tmp_path, "claims", [old, pred, common])})
+    assert next(c for c in r["checks"] if c["id"] == "claims.gnomad_flag_not_graded")["examples"] == ["X1", "X1"]
+    ann = [{"chrom": "1", "pos": i, "gnomad_popmax_af": 0.1, "gnomad_filtered": i == 1} for i in range(3)]
+    assert _status(checks.run({"annotations": _parquet(tmp_path, "annotations", ann)}))[
+        "annotations.gnomad_flag_read"] == "pass"
+    unread = [r | {"gnomad_filtered": None} for r in ann[1:]] + ann[:1]
+    assert _status(checks.run({"annotations": _parquet(tmp_path, "annotations", unread)}))[
+        "annotations.gnomad_flag_read"] == "fail"
+    old_schema = [{"chrom": "1", "pos": 1, "gnomad_popmax_af": 0.1}]          # before the flag was read at all
+    assert _status(checks.run({"annotations": _parquet(tmp_path, "annotations", old_schema)}))[
+        "annotations.gnomad_flag_read"] == "error"
+    brain = [{"gene": "X3", "chrom": "1", "pos": 5, "af_1kg": None, "gnomad_filtered": True, "sources": "[1]"},
+             {"gene": "X4", "chrom": "1", "pos": 6, "af_1kg": 0.0001, "gnomad_filtered": True, "sources": "[1]"}]
+    r = checks.run({"brain_variants": _parquet(tmp_path, "brain_variants", brain)})
+    assert next(c for c in r["checks"] if c["id"] == "brain.gnomad_flag_not_rare")["examples"] == ["X3 1:5"]
+
+
 def test_medlineplus_parse(tmp_path):
     p = tmp_path / "ghr.xml"
     p.write_text("""<?xml version="1.0"?><summaries>

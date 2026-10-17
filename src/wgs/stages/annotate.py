@@ -158,7 +158,40 @@ def _gnomad_fields(zip_path: Path) -> list[str]:
     return [f for f in meta.get("notes", {}).get("fields", []) if f.startswith("gnomad_")]
 
 
-def _consequences(ctx: Context, k: dict, log: Path) -> tuple[Path | None, list[str]]:
+# slivar adds this flag where gnomAD's own calls failed its quality checks (random-forest filter, InbreedingCoeff or
+# AC0). Such a site usually holds reads from a look-alike copy; its frequency is shown but not graded (ADR-023).
+GNOMAD_FLAG = "gnomad_popmax_af_filter"
+
+
+def _has_info(path: Path, tag: str) -> bool:
+    hdr = subprocess.run(["bcftools", "view", "-h", str(path)], capture_output=True, text=True, check=True).stdout
+    return f"##INFO=<ID={tag}," in hdr
+
+
+def _query_format(have_csq: bool, gfields: list[str], flag: bool) -> str:
+    """bcftools query columns: position, csq, the gnomAD fields, then the flag ('1' when set, '.' when not)."""
+    return ("%CHROM\t%POS\t%REF\t%ALT\t" + ("%INFO/BCSQ" if have_csq else ".") +
+            "".join(f"\t%INFO/{f}" for f in gfields) + (f"\t%INFO/{GNOMAD_FLAG}" if flag else "") + "\n")
+
+
+def _raw_columns(gfields: list[str], flag: bool) -> dict[str, str]:
+    cols = {"chrom_raw": "VARCHAR", "pos": "INTEGER", "ref": "VARCHAR", "alt": "VARCHAR", "bcsq": "VARCHAR"}
+    cols.update({f: "VARCHAR" for f in gfields})
+    return cols | ({"gnomad_flag": "VARCHAR"} if flag else {})
+
+
+def _gnomad_select(gfields: list[str], flag: bool) -> str:
+    """gnomAD columns from the raw query. slivar writes -1 when gnomAD has no value for an allele: that is "unknown",
+    not "ultra-rare". `gnomad_filtered` is NULL only when the gnomAD file carries no flag (status unknown)."""
+    sel = [f"CASE WHEN TRY_CAST(NULLIF(r.{f}, '.') AS DOUBLE) >= 0 THEN TRY_CAST(NULLIF(r.{f}, '.') AS DOUBLE) END "
+           f"AS {f}" for f in gfields]
+    if gfields:
+        sel.append("coalesce(r.gnomad_flag = '1', false) AS gnomad_filtered" if flag
+                   else "NULL::BOOLEAN AS gnomad_filtered")
+    return ", ".join(sel)
+
+
+def _consequences(ctx: Context, k: dict, log: Path) -> tuple[Path | None, list[str], bool]:
     """Run csq (+ slivar) over alt-carrying records; return a TSV of per-allele annotations."""
     fasta = reference.reference_fasta(ctx)
     naming = _vcf_naming(ctx)
@@ -174,30 +207,28 @@ def _consequences(ctx: Context, k: dict, log: Path) -> tuple[Path | None, list[s
         cmd += f" | bcftools csq -l -f '{fasta}' -g '{gff}' -Ou"
     run(f"{cmd} | bcftools view -Ob -o '{bcf}' --write-index", shell=True, log=log)
     gfields: list[str] = []
+    flag = False
     if k["gnomad"]:
         gfields = _gnomad_fields(k["gnomad"])
         out = tmp / "alt.gnomad.bcf"
         run(["slivar", "expr", "--vcf", str(bcf), "--gnotate", str(k["gnomad"]), "-o", str(out)], log=log)
         bcf = out
-    fmt = "%CHROM\t%POS\t%REF\t%ALT\t" + ("%INFO/BCSQ" if have_csq else ".") + \
-        "".join(f"\t%INFO/{f}" for f in gfields) + "\n"
+        flag = _has_info(bcf, GNOMAD_FLAG)
     tsv = tmp / "annot.tsv"
-    run(f"bcftools query -f '{fmt}' '{bcf}' > '{tsv}'", shell=True, log=log)
-    return tsv, gfields
+    run(f"bcftools query -f '{_query_format(have_csq, gfields, flag)}' '{bcf}' > '{tsv}'", shell=True, log=log)
+    return tsv, gfields, flag
 
 
 def build(ctx: Context) -> dict:
     log = ctx.logs / "annotate.log"
     k = _knowledge(ctx)
-    tsv, gfields = _consequences(ctx, k, log)
+    tsv, gfields, flag = _consequences(ctx, k, log)
     rev = {v: c for c, v in _vcf_naming(ctx).items()}
     con = duckdb.connect()
     con.execute(f"SET threads={ctx.threads}")
     con.execute("SET preserve_insertion_order=false")
-    cols = {"chrom_raw": "VARCHAR", "pos": "INTEGER", "ref": "VARCHAR", "alt": "VARCHAR", "bcsq": "VARCHAR"}
-    cols.update({f: "VARCHAR" for f in gfields})
     con.execute(f"CREATE TEMP TABLE raw AS SELECT * FROM read_csv('{tsv}', delim='\t', header=false, quote='', "
-                f"columns={json.dumps(cols)})")
+                f"columns={json.dumps(_raw_columns(gfields, flag))})")
     con.execute("CREATE TEMP TABLE chrmap(raw VARCHAR, chrom VARCHAR)")
     con.executemany("INSERT INTO chrmap VALUES (?, ?)", [[a, b] for a, b in rev.items()])
     rank = "CASE t " + " ".join(f"WHEN '{t}' THEN {r}" for t, r in CSQ_RANK.items()) + " ELSE 0 END"
@@ -233,9 +264,7 @@ def build(ctx: Context) -> dict:
              arg_max(r, {score}) AS r,
              list_distinct(list(gene) FILTER (WHERE gene <> '')) AS genes
       FROM s GROUP BY ALL""")
-    # slivar writes -1 when gnomAD has no value for an allele: that is "unknown", not "ultra-rare"
-    gsel = ", ".join(f"CASE WHEN TRY_CAST(NULLIF(r.{f}, '.') AS DOUBLE) >= 0 "
-                     f"THEN TRY_CAST(NULLIF(r.{f}, '.') AS DOUBLE) END AS {f}" for f in gfields)
+    gsel = _gnomad_select(gfields, flag)
     con.execute(f"""
       CREATE TEMP TABLE gn AS SELECT m.chrom, r.pos, r.ref, r.alt{', ' + gsel if gsel else ''}
       FROM raw r JOIN chrmap m ON m.raw = r.chrom_raw""")
@@ -281,7 +310,8 @@ def build(ctx: Context) -> dict:
     else:
         pred_cols += ["NULL::FLOAT AS loeuf", "NULL::FLOAT AS pli", "NULL::FLOAT AS mis_z"]
     gn_cols = ", ".join([f"gn.{f}" for f in gfields] +
-                        ([] if "gnomad_popmax_af" in gfields else ["NULL::DOUBLE AS gnomad_popmax_af"]))
+                        ([] if "gnomad_popmax_af" in gfields else ["NULL::DOUBLE AS gnomad_popmax_af"]) +
+                        (["gn.gnomad_filtered"] if gfields else ["NULL::BOOLEAN AS gnomad_filtered"]))
     # csq reports nothing for alleles outside every gene: call those intergenic (only if csq actually ran)
     csq_col = "coalesce(c.consequence, 'intergenic')" if k["gff"] and reference.reference_fasta(ctx) \
         else "c.consequence"
@@ -309,7 +339,7 @@ def build(ctx: Context) -> dict:
     stats = con.execute(f"""
       SELECT count(*), count(consequence), count(*) FILTER (WHERE impact = 'HIGH'),
              count(*) FILTER (WHERE impact = 'MODERATE'), count(clinvar_id), count(af_1kg),
-             count(*) FILTER (WHERE af_1kg IS NULL AND filter = 'PASS')
+             count(*) FILTER (WHERE af_1kg IS NULL AND filter = 'PASS'), count(*) FILTER (WHERE gnomad_filtered)
       FROM '{out}'""").fetchone()
     by_class = dict(con.execute(f"SELECT clinvar_class, count(*) FROM '{out}' WHERE clinvar_class IS NOT NULL "
                                 f"GROUP BY 1 ORDER BY 2 DESC").fetchall())
@@ -318,6 +348,7 @@ def build(ctx: Context) -> dict:
         "knowledge": Store(ctx.cfg).versions(),
         "alleles": stats[0], "with_consequence": stats[1], "high_impact": stats[2], "moderate_impact": stats[3],
         "in_clinvar": stats[4], "in_1000genomes": stats[5], "pass_not_in_1000genomes": stats[6],
+        "gnomad_flagged": stats[7],
         "clinvar_classes": by_class, "claims": claims,
     }
     write_json(summary_path(ctx), summary)
@@ -344,14 +375,15 @@ def _claims(ctx: Context, con, k: dict) -> int:
     kb = Kb(k)
     classes = ", ".join(f"'{c}'" for c in CLAIM_CLASSES)
     ann = annotations_path(ctx)
+    ann_rows = f"(SELECT * REPLACE (coalesce(gnomad_filtered, false) AS gnomad_filtered) FROM '{ann}')"
     rows = con.execute(f"""
-      SELECT * FROM '{ann}'
+      SELECT * FROM {ann_rows}
       WHERE clinvar_class IN ({classes})
         AND (clinvar_class <> 'conflicting' OR clinvar_conflicts ILIKE '%pathogenic%')
       ORDER BY chrom_order, pos""").fetchdf().to_dict("records")
     lof = " OR ".join(f"consequence LIKE '%{c}%'" for c in ev.LOF)
     predicted_rows = con.execute(f"""
-      SELECT * FROM '{ann}'
+      SELECT * FROM {ann_rows}
       WHERE coalesce(clinvar_class, '') NOT IN ({classes}, 'benign', 'likely_benign')
         AND filter = 'PASS'
         AND (am_score > {ev.AM_LIKELY_PATHOGENIC} OR revel >= {ev.REVEL_SUPPORTING} OR {lof})
@@ -365,6 +397,7 @@ def _claims(ctx: Context, con, k: dict) -> int:
                                   for g in r[col]), None)
         copies = 2 if r["zygosity"] == "hom" else 1
         popmax = r.get("gnomad_popmax_af")
+        flagged = bool(r.get("gnomad_filtered"))   # shown, but never graded (ADR-023 addendum)
         if predicted:
             if not kb.disease_gene(gene):
                 continue
@@ -373,7 +406,7 @@ def _claims(ctx: Context, con, k: dict) -> int:
             e_level, e_reasons = ev.predicted_evidence(
                 consequence=r["consequence"], am_score=r.get("am_score"), revel=r.get("revel"), loeuf=r.get("loeuf"),
                 popmax_af=popmax, kg_af=r["af_1kg"], recessive_gene="AR" in modes,
-                clinvar=_clinvar_label(r))
+                clinvar=_clinvar_label(r), gnomad_filtered=flagged)
             if e_level is None:
                 continue
             cls = "predicted"
@@ -386,14 +419,16 @@ def _claims(ctx: Context, con, k: dict) -> int:
             modes, basis = kb.modes_for(gene, conds)
             e_level, e_reasons = ev.clinvar_evidence(r["clinvar_stars"], cls, popmax_af=popmax, kg_af=r["af_1kg"],
                                                      gene_validity=kb.validity.get(gene),
-                                                     low_penetrance=bool(r["clinvar_low_penetrance"]))
+                                                     low_penetrance=bool(r["clinvar_low_penetrance"]),
+                                                     gnomad_filtered=flagged)
         c_level, c_reasons = ev.call_confidence(filter=r["filter"], gq=r["gq"], dp=r["dp"], vaf=r["vaf"],
                                                 zygosity=r["zygosity"], provider=_provider_agrees(r))
         role, role_reason = ev.role(modes, r["zygosity"], r["chrom"])
         condition_roles = [{"name": c.name, "role": ev.role(set(c.modes), r["zygosity"], r["chrom"])[0]}
                            for c in conds if c.modes]
         disease_like = cls in ("pathogenic", "likely_pathogenic", "conflicting", "predicted")
-        common = ev.too_common(popmax_af=popmax, kg_af=r["af_1kg"], stars=r.get("clinvar_stars"))
+        common = ev.too_common(popmax_af=popmax, kg_af=r["af_1kg"], stars=r.get("clinvar_stars"),
+                               gnomad_filtered=flagged)
         if disease_like and common:
             # A rare-disease role (carrier/affected) presumes a rare disease allele; BA1 says this one isn't.
             role, role_reason, condition_roles = "common", common, []
@@ -489,6 +524,7 @@ def _claims(ctx: Context, con, k: dict) -> int:
             "actionability": json.dumps(act) if act else None,
             "am_score": r.get("am_score"), "revel": r.get("revel"), "loeuf": r.get("loeuf"),
             "af_1kg": r["af_1kg"], "af_1kg_eur": r["af_1kg_eur"], "gnomad_popmax_af": popmax,
+            "gnomad_filtered": flagged,
             "evidence_level": e_level, "evidence_reasons": e_reasons,
             "call_level": c_level, "call_reasons": c_reasons,
             "overall": ev.overall(e_level, c_level),
@@ -636,9 +672,10 @@ def _alt_is_major(r: dict) -> tuple[float, str] | None:
 
     GRCh37 was assembled from a handful of people, so at some sites the reference carries the rare allele
     (Factor V Leiden, rs6025, is the classic example). There the "variant" ClinVar describes is the version
-    most people have, and "you carry two copies" means "you are typical"."""
-    for af, label in ((r.get("af_1kg"), "1000 Genomes, all populations"),
-                      (r.get("gnomad_popmax_af"), "gnomAD, highest population")):
+    most people have, and "you carry two copies" means "you are typical". A frequency gnomAD flagged says
+    nothing either way."""
+    gnomad = None if r.get("gnomad_filtered") else r.get("gnomad_popmax_af")
+    for af, label in ((r.get("af_1kg"), "1000 Genomes, all populations"), (gnomad, "gnomAD, highest population")):
         if af is not None:
             return (float(af), label) if af >= 0.5 else None
     return None
@@ -715,7 +752,7 @@ def _statement(cls: str, conditions: str, copies: int, role: str | None, r: dict
 
 
 STAGE = Stage(
-    name="annotate", version="5", title="Annotate with knowledge sources and grade claims", fn=build,
+    name="annotate", version="6", title="Annotate with knowledge sources and grade claims", fn=build,
     inputs=_inputs,
     outputs=lambda ctx: [annotations_path(ctx), claims_path(ctx), summary_path(ctx)],
     available=_available,
