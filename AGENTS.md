@@ -26,6 +26,12 @@ Paths in a manifest (`tables.<name>.path`, `documents.<name>.path`) are
 relative to `wgs-data/releases/`, not to the release folder. The data folder may
 be somewhere else on another machine; `pixi run wgs doctor` shows where it is.
 
+A second workspace, `wgs-data-demo/`, may sit next to it: a **demo release** built
+from Genome in a Bottle's HG002 truth VCF (a public reference genome, not the
+owner). Its manifest has a `truth_set` field (`label`, `version`, `url`); when you
+see it, say you are looking at HG002. Query it with
+`pixi run -q wgs --config config/demo.toml query …`.
+
 ## 2. How to query (preferred)
 
 Use the read-only query command. It opens the newest release, exposes every
@@ -195,7 +201,15 @@ pixi run wgs run                    # run/resume all stages, publish a new relea
 pixi run wgs knowledge status       # versions of ClinVar, gnomAD, ClinGen, …
 pixi run wgs knowledge refresh      # fetch newer knowledge, then `wgs run`
 pixi run build-dashboard            # rebuild the viewer app
+pixi run demo                       # rebuild the HG002 demo release (config/demo.toml)
 ```
+
+The demo config shows two options a normal config doesn't need: `[paths]
+knowledge` borrows another workspace's knowledge store read-only (refresh it from
+its own config), and `[truth]` (`label`, `version`, `url`, optional `vcf` and
+`regions`) marks the VCF as a truth set, so the callable map comes from its
+confident regions and call confidence follows the truth-set rule (ADR-023
+addendum).
 
 Heavy stages (annotate) can take 10–20 minutes. Confirm with the owner before
 starting long jobs.

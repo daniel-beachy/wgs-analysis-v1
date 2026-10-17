@@ -9,6 +9,8 @@ export interface Manifest {
   tables: Record<string, ObjectRef>;
   documents: Record<string, ObjectRef>;
   knowledge: { versions?: Record<string, string>; evidence_model?: string | null };
+  /** Set when the release was built from a public truth set (the demo, Step 9c), not a personal genome. */
+  truth_set?: { label: string; version?: string; url?: string };
 }
 
 export const DATA = new URL('./data/', document.baseURI).href;

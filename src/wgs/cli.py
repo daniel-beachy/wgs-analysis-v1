@@ -244,10 +244,35 @@ def run_cmd(
     threads: int = typer.Option(0, help="Worker threads (default: CPU count - 2)."),
 ):
     """Run the analysis pipeline. Stages whose inputs and code are unchanged are skipped."""
+    _run(_cfg(), only, force, threads)
+
+
+@app.command("demo")
+def demo_cmd(
+    only: list[str] = typer.Option(None, "--only", help="Run only these stages (repeatable)."),
+    force: list[str] = typer.Option(None, "--force", help="Recompute these stages ('all' for everything)."),
+    threads: int = typer.Option(0, help="Worker threads (default: CPU count - 2)."),
+    pgs: bool = typer.Option(False, "--pgs", help="Also compute polygenic scores (hours: the 1000 Genomes "
+                                                  "reference panel is scored for this genome's positions)."),
+):
+    """Build the public demo release from Genome in a Bottle HG002 (use with --config config/demo.toml)."""
+    from . import demo
+
+    cfg = _cfg()
+    if not cfg.truth:
+        console.print("[red]This config has no [truth] section. Run: wgs --config config/demo.toml demo[/]")
+        raise typer.Exit(2)
+    console.print(f"Demo input: {demo.prepare(cfg)}")
+    skip = {} if pgs or "pgs" in (only or []) else {
+        "pgs": "left out of the demo (hours of 1000 Genomes reference scoring); add --pgs to include it"}
+    _run(cfg, only, force, threads, skip)
+
+
+def _run(cfg: Config, only: list[str] | None, force: list[str] | None, threads: int,
+         skip: dict[str, str] | None = None) -> None:
     from .pipeline import Context, run_stage
     from .stages.registry import STAGES
 
-    cfg = _cfg()
     inv = discover(cfg)
     ctx = Context(cfg=cfg, inv=inv, force=set(force or []))
     if threads:
@@ -259,18 +284,29 @@ def run_cmd(
             console.print(f"[red]Unknown stage {name}. Known: {', '.join(sorted(names))}[/]")
             raise typer.Exit(2)
     failed = []
-    for stage in STAGES:
-        if only and stage.name not in only:
-            continue
-        try:
-            run_stage(ctx, stage)
-        except Exception as exc:
-            import traceback
+    # Run from this sample's scratch folder: DuckDB spills to ".tmp" in the working folder under fixed file names,
+    # so two runs started from the repo (your genome and the demo) overwrote each other's spill files, and the
+    # spilled genome data landed inside the public repo's folder.
+    home = Path.cwd()
+    os.chdir(ctx.scratch)
+    try:
+        for stage in STAGES:
+            if only and stage.name not in only:
+                continue
+            if stage.name in (skip or {}):
+                console.print(f"[dim]↷ {stage.title}: {skip[stage.name]}[/]")
+                continue
+            try:
+                run_stage(ctx, stage)
+            except Exception as exc:
+                import traceback
 
-            failed.append(stage.name)
-            with open(ctx.logs / f"{stage.name}.log", "a") as fh:
-                fh.write(traceback.format_exc())
-            console.print(f"[red]✗ {stage.title} failed:[/] {exc} [dim](traceback in logs/{stage.name}.log)[/]")
+                failed.append(stage.name)
+                with open(ctx.logs / f"{stage.name}.log", "a") as fh:
+                    fh.write(traceback.format_exc())
+                console.print(f"[red]✗ {stage.title} failed:[/] {exc} [dim](traceback in logs/{stage.name}.log)[/]")
+    finally:
+        os.chdir(home)
     if failed:
         console.print(f"[red]{len(failed)} stage(s) failed: {', '.join(failed)}. Logs: {ctx.logs}[/]")
         raise typer.Exit(1)

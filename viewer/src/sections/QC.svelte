@@ -182,12 +182,16 @@
           </div>
           <div>
             <h4>Allele balance at heterozygous sites</h4>
-            <Line points={v.hist.het_vaf} xFmt={(x) => x.toFixed(1)} yFmt={compact} xLabel="share of reads showing the variant (VAF)" marker={{ x: 0.5, label: '50%' }} height={180} />
-            <p class="small faint">A clean single sample peaks at 50% — one copy from each parent.</p>
+            {#if v.hist.het_vaf?.length}
+              <Line points={v.hist.het_vaf} xFmt={(x) => x.toFixed(1)} yFmt={compact} xLabel="share of reads showing the variant (VAF)" marker={{ x: 0.5, label: '50%' }} height={180} />
+              <p class="small faint">A clean single sample peaks at 50% — one copy from each parent.</p>
+            {:else}<p class="muted small">This VCF has no read counts.</p>{/if}
           </div>
           <div>
             <h4>Read depth at variant sites</h4>
-            <Line points={v.hist.depth} xFmt={(x) => `${x.toFixed(0)}×`} yFmt={compact} xLabel="reads covering the variant" height={170} />
+            {#if v.hist.depth?.length}
+              <Line points={v.hist.depth} xFmt={(x) => `${x.toFixed(0)}×`} yFmt={compact} xLabel="reads covering the variant" height={170} />
+            {:else}<p class="muted small">This VCF has no read counts.</p>{/if}
           </div>
           <div>
             <h4>Genotype quality (GQ)</h4>
@@ -208,7 +212,8 @@
 
       <div class="grid cols-2">
         <Card title="Genetic sex check" subtitle="Inferred from the data, independent of what the provider was told.">
-          <div class="row"><span class="kpi">{sex.call}</span><span class="muted">chromosomal sex</span></div>
+          <div class="row"><span class="kpi">{sex.call ?? '—'}</span><span class="muted">chromosomal sex</span></div>
+          {#if !sex.call}<p class="muted small">Not checked: this release has no X or Y chromosome data to compare.</p>{/if}
           <table class="small">
             <tbody>
               <tr><td>X depth relative to autosomes</td><td class="num">{sex.x_ratio?.toFixed(2)}</td><td class="faint">≈0.5 for one X, ≈1.0 for two</td></tr>
@@ -222,6 +227,7 @@
           </Explain>
         </Card>
 
+        {#if qc.sections.concordance}
         <Card title="Agreement with the provider’s genotype file" subtitle="Two independently produced files compared position by position.">
           {@const c = qc.sections.concordance}
           <div class="row"><span class="kpi">{c.concordance_pct.toFixed(2)}%</span><span class="muted">of {int(c.compared)} positions agree</span></div>
@@ -237,6 +243,7 @@
             <p>tellmeGen’s 23andMe-style text file and the VCF were produced by separate steps. Full agreement means the files belong together and were converted without errors, so results from either file can be trusted interchangeably.</p>
           </Explain>
         </Card>
+        {/if}
       </div>
 
       {#if rc.length}
@@ -468,12 +475,16 @@
         </Card>
       {/if}
 
-      <Card title="Reference genome proof" subtitle="The CRAM can only be decoded with the exact reference it was made with.">
+      <Card title="Reference genome proof" subtitle={qc.sections.reference?.reads_decoded == null ? 'Every reference letter the VCF names must match the reference genome used here.' : 'The CRAM can only be decoded with the exact reference it was made with.'}>
         {@const r = qc.sections.reference}
-        <p>The reference was <strong>{r?.origin ?? 'located'}</strong>, then checked against fingerprints stored inside your CRAM file.</p>
+        {#if r?.reads_decoded == null}
+          <p>The reference was <strong>{r?.origin ?? 'located'}</strong>.</p>
+        {:else}
+          <p>The reference was <strong>{r?.origin ?? 'located'}</strong>, then checked against fingerprints stored inside your CRAM file.</p>
+        {/if}
         <table class="small">
           <tbody>
-            <tr><td>Quick check: reads decoded across all {r?.contigs} <Term t="Contig" label="contigs" /></td><td class="num">{int(r?.reads_decoded)}</td></tr>
+            {#if r?.reads_decoded != null}<tr><td>Quick check: reads decoded across all {r?.contigs} <Term t="Contig" label="contigs" /></td><td class="num">{int(r?.reads_decoded)}</td></tr>{/if}
             <tr><td>VCF reference letters that disagree with the FASTA</td><td class="num">{int(r?.vcf_ref_mismatches)}</td></tr>
             {#if full}
               <tr><td><strong>Full proof: every read decoded</strong></td><td class="num">{int(full.reads_decoded)}</td></tr>

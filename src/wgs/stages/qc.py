@@ -68,7 +68,9 @@ def _vcf_metrics(con, vp: Path) -> dict:
     (snv, indel, ins, dele, mnv, het, hom, ts, multi, vaf_med, q1, q3, dp_med, gq_med) = q
     m.update(snv_count=snv, indel_count=indel, insertion_count=ins, deletion_count=dele, mnv_count=mnv,
              multiallelic_rows=multi, titv=round(ts / max(snv - ts, 1), 3), het_hom_ratio=round(het / max(hom, 1), 3),
-             het_vaf_median=round(vaf_med, 3), het_vaf_iqr=[round(q1, 3), round(q3, 3)], depth_median=dp_med,
+             # A truth set (the demo) has no read fractions: leave them empty rather than fail.
+             het_vaf_median=None if vaf_med is None else round(vaf_med, 3),
+             het_vaf_iqr=None if q1 is None else [round(q1, 3), round(q3, 3)], depth_median=dp_med,
              gq_median=gq_med)
     filters = dict(con.execute(f"SELECT filter, count(*) FROM '{vp}' GROUP BY 1").fetchall())
     m["records_by_filter"] = filters
@@ -79,7 +81,8 @@ def _vcf_metrics(con, vp: Path) -> dict:
              count(*) FILTER (WHERE chrom='X' AND NOT ({par}) AND zygosity IN ('hom','hemi')),
              count(*) FILTER (WHERE chrom='Y')
       FROM '{vp}' WHERE filter='PASS' AND vtype='SNV'""").fetchone()
-    m["chrX_nonpar_het_fraction"] = round(xh / max(xh + xo, 1), 4)
+    # No chrX calls at all (a truth set covering chromosomes 1–22) says nothing about sex: unknown, not XY.
+    m["chrX_nonpar_het_fraction"] = round(xh / (xh + xo), 4) if xh + xo else None
     m["chrY_pass_snvs"] = y
 
     m["per_chrom"] = [dict(zip(("chrom", "snv", "indel", "het", "hom"), r, strict=True)) for r in con.execute(f"""
@@ -89,11 +92,11 @@ def _vcf_metrics(con, vp: Path) -> dict:
       GROUP BY chrom, chrom_order ORDER BY chrom_order""").fetchall()]
     m["hist"] = {
         "het_vaf": con.execute(f"""SELECT round(floor(vaf*50)/50, 2) b, count(*) FROM '{vp}'
-            WHERE filter='PASS' AND zygosity='het' AND vtype='SNV' AND chrom NOT IN ('X','Y','MT')
+            WHERE filter='PASS' AND zygosity='het' AND vtype='SNV' AND chrom NOT IN ('X','Y','MT') AND vaf IS NOT NULL
             GROUP BY b ORDER BY b""").fetchall(),
-        "depth": con.execute(f"""SELECT least(dp, 100) b, count(*) FROM '{vp}' WHERE filter='PASS'
+        "depth": con.execute(f"""SELECT least(dp, 100) b, count(*) FROM '{vp}' WHERE filter='PASS' AND dp IS NOT NULL
             GROUP BY b ORDER BY b""").fetchall(),
-        "gq": con.execute(f"""SELECT gq b, count(*) FROM '{vp}' WHERE filter='PASS'
+        "gq": con.execute(f"""SELECT gq b, count(*) FROM '{vp}' WHERE filter='PASS' AND gq IS NOT NULL
             GROUP BY b ORDER BY b""").fetchall(),
         "indel_length": con.execute(f"""SELECT greatest(least(length(alt)-length(ref), 20), -20) b, count(*)
             FROM '{vp}' WHERE filter='PASS' AND vtype IN ('INS','DEL') AND zygosity <> 'ref'

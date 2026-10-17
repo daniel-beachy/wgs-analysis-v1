@@ -143,11 +143,17 @@ def clinvar_evidence(stars: int, sig_class: str, *, popmax_af: float | None = No
 
 
 def call_confidence(*, filter: str | None, gq: int | None, dp: int | None, vaf: float | None,
-                    zygosity: str | None, provider: str | None = None) -> tuple[str, list[str]]:
-    """How sure we are of the genotype. `provider` is 'agree', 'disagree' or None (not on their file)."""
+                    zygosity: str | None, provider: str | None = None, truth: str | None = None
+                    ) -> tuple[str, list[str]]:
+    """How sure we are of the genotype. `provider` is 'agree', 'disagree' or None (not on their file). `truth` names
+    the truth set when the VCF is one (the demo, ADR-023 addendum): its genotypes inside its confident regions are
+    what accuracy is measured against, and there are no reads whose depth could be graded."""
     reasons: list[str] = []
     if filter not in (None, "PASS", "."):
         return "Low", [f"Variant caller flagged this site ({filter}) — not a confident call"]
+    if truth:
+        return "High", [f"Benchmark genotype from the {truth}, which combines several sequencing technologies, "
+                        "inside the regions it is confident about (there are no reads to count here)"]
     gq, dp = gq or 0, dp or 0
     if gq >= 30 and dp >= 15:
         level = "High"

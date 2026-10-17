@@ -7,7 +7,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -46,7 +48,7 @@ func main() {
 		log.Printf("data: %s", releases)
 	}
 
-	ln, url, existing := listen(*port)
+	ln, url, existing := listen(*port, dataID(releases))
 	if existing != "" {
 		log.Printf("already running at %s; opening it", existing)
 		if !*noBrowser {
@@ -58,7 +60,10 @@ func main() {
 	var last atomic.Int64
 	last.Store(time.Now().Unix())
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "genome-dashboard ", version) })
+	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(dataHeader, dataID(releases))
+		fmt.Fprint(w, "genome-dashboard ", version)
+	})
 	mux.HandleFunc("/api/heartbeat", func(w http.ResponseWriter, _ *http.Request) { last.Store(time.Now().Unix()); w.WriteHeader(204) })
 	mux.HandleFunc("/api/bye", func(w http.ResponseWriter, _ *http.Request) {
 		// Closing one tab (or reloading) sends "bye"; give the page a few seconds to re-announce itself.
@@ -92,8 +97,25 @@ func main() {
 	}
 }
 
-// listen binds 127.0.0.1 on the preferred port, or reports an already-running instance, or falls back to any free port.
-func listen(port int) (net.Listener, string, string) {
+// dataHeader tells a second launcher which data folder a running instance serves.
+const dataHeader = "X-Genome-Data"
+
+// dataID names a releases folder without revealing its path.
+func dataID(releases string) string {
+	if releases == "" {
+		return "none"
+	}
+	if abs, err := filepath.Abs(releases); err == nil {
+		releases = abs
+	}
+	h := sha256.Sum256([]byte(filepath.Clean(releases)))
+	return hex.EncodeToString(h[:8])
+}
+
+// listen binds 127.0.0.1 on the preferred port, or reports an already-running instance serving the same data, or
+// falls back to any free port. An instance serving other data (the public demo next to a personal genome) is never
+// reused: opening it would show the wrong genome.
+func listen(port int, id string) (net.Listener, string, string) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	if ln, err := net.Listen("tcp", addr); err == nil {
 		return ln, "http://" + addr + "/", ""
@@ -101,7 +123,7 @@ func listen(port int) (net.Listener, string, string) {
 	c := http.Client{Timeout: time.Second}
 	if r, err := c.Get("http://" + addr + "/api/ping"); err == nil {
 		r.Body.Close()
-		if r.StatusCode == 200 {
+		if r.StatusCode == 200 && r.Header.Get(dataHeader) == id {
 			return nil, "", "http://" + addr + "/"
 		}
 	}

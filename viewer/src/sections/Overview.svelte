@@ -19,7 +19,7 @@
   <div class="grid">
     <section class="hero">
       <div>
-        <p class="eyebrow">Your genome · release {m.id}</p>
+        <p class="eyebrow">{m.truth_set ? `${m.sample} (demo)` : 'Your genome'} · release {m.id}</p>
         <h1>About 3 billion letters, read {cov ? `${Math.round(cov.autosomal_mean_depth)} times over` : 'many times over'}.</h1>
         <p class="lead">This dashboard turns your whole-genome sequencing data into something you can explore and keep learning from. Every claim it makes will show the evidence behind it and how confident it is — and when the science changes, a refresh shows exactly what changed for you.</p>
         <div class="row">
@@ -31,8 +31,8 @@
       <div class="facts">
         {#if qc}
           <div><span class="kpi">{compact(qc.metrics.snv_count + qc.metrics.indel_count)}</span><span class="muted small">confident <Term t="Variant" label="variants" /></span></div>
-          <div><span class="kpi">{qc.metrics.autosomal_mean_depth}×</span><span class="muted small">average <Term t="Coverage" label="depth" /></span></div>
-          <div><span class="kpi">{qc.inferred_sex?.call}</span><span class="muted small">chromosomal sex</span></div>
+          <div><span class="kpi">{qc.metrics.autosomal_mean_depth != null ? `${qc.metrics.autosomal_mean_depth}×` : '—'}</span><span class="muted small">average <Term t="Coverage" label="depth" />{qc.metrics.autosomal_mean_depth == null ? ' (no reads)' : ''}</span></div>
+          <div><span class="kpi">{qc.inferred_sex?.call ?? '—'}</span><span class="muted small">chromosomal sex{qc.inferred_sex?.call ? '' : ' (not checked)'}</span></div>
           <div><span class="kpi">{passed}/{checks.length}</span><span class="muted small">quality checks pass</span></div>
         {/if}
       </div>
@@ -90,7 +90,7 @@
             <span><strong>{int(ann.claims)}</strong> graded findings</span>
           </div>
         {/if}
-        <table class="small">
+        <div class="wide"><table class="small">
           <thead><tr><th>Source</th><th>Version used</th><th>What it adds</th><th>Updates</th><th>Licence</th></tr></thead>
           <tbody>
             {#each Object.entries(know.sources) as [id, s]}
@@ -100,7 +100,7 @@
             {/each}
             <tr><td>Evidence model</td><td class="mono">v{know.evidence_model}</td><td class="muted">The grading rules themselves (ADR-013). Changing them is tracked like a data update.</td><td></td><td></td></tr>
           </tbody>
-        </table>
+        </table></div>
       </Card>
     {/if}
   </div>
@@ -110,6 +110,7 @@
   .hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 28px; padding: 30px; border-radius: 18px; border: 1px solid var(--border);
     background: radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 45%), radial-gradient(circle at 10% 90%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 50%), var(--panel); }
   @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+  .wide { overflow-x: auto; } /* five columns don't fit a phone: scroll the table, not the page */
   .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
   h1 { font-size: 2rem; max-width: 22ch; }
   .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: center; }

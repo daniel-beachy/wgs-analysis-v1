@@ -1,0 +1,22 @@
+# Demo configuration: Genome in a Bottle HG002's truth set instead of a personal genome (Step 9c, ADR-023 addendum).
+# Public data only, so it is committed and the release it builds can be shown to anyone.
+#   pixi run demo                  build or update the demo release in ../wgs-data-demo
+#   open it with the launcher's -data flag (README, "Demo release")
+# Relative paths resolve against this file's folder (config/), so "../.." is the Genomics folder.
+[paths]
+workspace = "../../wgs-data-demo"
+search = ["../../wgs-data-demo/input"]   # only the prepared demo VCF; never the personal input folders
+knowledge = "../../wgs-data/knowledge"   # borrowed read-only from the main workspace (public data, ~12 GB)
+
+[sample]
+id = "HG002"
+
+[inputs]
+# The GRCh37 FASTA the reference stage rebuilt from Ensembl release 75 (public); re-verified against the demo VCF.
+reference = "../../wgs-data/cache/reference/GRCh37.primary_assembly.par_y_masked.fa"
+
+[truth]
+label = "Genome in a Bottle HG002 truth set v4.2.1 (GRCh37)"
+version = "4.2.1"
+url = "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/AshkenazimTrio/HG002_NA24385_son/NISTv4.2.1/GRCh37/"
+# vcf / regions default to the giab knowledge source (truth.vcf.gz, confident.bed)

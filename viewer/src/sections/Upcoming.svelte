@@ -42,7 +42,8 @@
     <p class="lead">{def.blurb}</p>
     {#if def.evidence}<p class="small"><strong>Evidence it will rest on:</strong> <span class="muted">{def.evidence}</span></p>{/if}
     <div class="row center">
-      <span class="pill soon">Arrives in step {def.step} of the build plan</span>
+      <!-- A built section with no tables: its stage was skipped for this release (e.g. the demo has no reads) -->
+      <span class="pill soon">{def.ready ? 'No results in this release' : `Arrives in step ${def.step} of the build plan`}</span>
       {#if status}<span class="pill {status.status}" title={status.detail}>your data: {status.status}</span>{/if}
     </div>
     {#if parts.plus.length || parts.missing.length || status?.note}
@@ -52,7 +53,7 @@
         {#if status?.note}<p class="faint">{status.note}</p>{/if}
       </div>
     {/if}
-    {#if learnSlug}<button onclick={() => go('learn', learnSlug)}>📖 Read the background while you wait</button>{/if}
+    {#if learnSlug}<button onclick={() => go('learn', learnSlug)}>📖 Read the background{def.ready ? '' : ' while you wait'}</button>{/if}
   </div>
 </Card>
 {/if}

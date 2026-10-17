@@ -3,7 +3,7 @@
 Nothing about file locations is hard-coded. Resolution order (first wins):
 
 1. CLI flags (``--data``, ``--workspace``, ``--config``)
-2. Environment variables ``WGS_CONFIG``, ``WGS_DATA``, ``WGS_WORKSPACE``
+2. Environment variables ``WGS_CONFIG``, ``WGS_DATA``, ``WGS_WORKSPACE``, ``WGS_KNOWLEDGE``
 3. A TOML config file (``WGS_CONFIG`` or ``<repo>/wgs.local.toml``), including
    ``[host."<hostname>"]`` overrides so one file can serve several machines
 4. Defaults relative to the repository: search ``<repo>/..`` for inputs and use
@@ -39,6 +39,8 @@ class Config:
     forbidden_strings: list[str] = field(default_factory=list)
     config_file: Path | None = None
     host: str = ""
+    knowledge: Path | None = None  # borrow another workspace's knowledge store (read-only), e.g. for the demo
+    truth: dict = field(default_factory=dict)  # the VCF is a benchmark truth set, not a sequencing run (ADR-023)
 
     @property
     def cache_dir(self) -> Path:
@@ -55,6 +57,15 @@ class Config:
     @property
     def dashboard_dir(self) -> Path:
         return self.workspace / "dashboard"
+
+    @property
+    def knowledge_dir(self) -> Path:
+        return self.knowledge or self.workspace / "knowledge"
+
+    @property
+    def knowledge_borrowed(self) -> bool:
+        """True when the knowledge store belongs to another workspace, so this config must not refresh it."""
+        return self.knowledge is not None and not self.knowledge.resolve().is_relative_to(self.workspace.resolve())
 
 
 def _resolve(p: str | os.PathLike, base: Path) -> Path:
@@ -117,6 +128,12 @@ def load_config(
     external = [_resolve(d, base) for d in _as_list(raw.get("external", {}).get("dirs"))]
     external.append(ws / "external")
 
+    knowledge = os.environ.get("WGS_KNOWLEDGE") or paths.get("knowledge")
+    truth = dict(raw.get("truth", {}))
+    for key in ("vcf", "regions"):
+        if truth.get(key):
+            truth[key] = _resolve(truth[key], base)
+
     return Config(
         workspace=ws,
         search=search,
@@ -126,4 +143,6 @@ def load_config(
         forbidden_strings=_as_list(raw.get("guard", {}).get("forbidden_strings")),
         config_file=cfg_file,
         host=host,
+        knowledge=_resolve(knowledge, Path.cwd() if os.environ.get("WGS_KNOWLEDGE") else base) if knowledge else None,
+        truth=truth,
     )

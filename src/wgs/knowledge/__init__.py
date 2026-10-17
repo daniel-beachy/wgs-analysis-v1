@@ -66,8 +66,9 @@ class Source:
 
 class Store:
     def __init__(self, cfg: Config):
-        self.root = cfg.workspace / "knowledge"
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.root = cfg.knowledge_dir
+        if not cfg.knowledge_borrowed:
+            self.root.mkdir(parents=True, exist_ok=True)
         self.index_file = self.root / "index.json"
 
     def index(self) -> dict:
@@ -165,6 +166,9 @@ def refresh(cfg: Config, scratch: Path, only: list[str] | None = None, pin: dict
     """Bring sources up to date. Returns {source: 'updated <v>' | 'up to date <v>' | 'failed: ...'}."""
     from .registry import SOURCES
 
+    if cfg.knowledge_borrowed:
+        raise RuntimeError(f"This config borrows the knowledge store at {cfg.knowledge_dir}; refresh it with the "
+                           "config of the workspace it belongs to.")
     store = Store(cfg)
     out: dict[str, str] = {}
     for src in SOURCES:

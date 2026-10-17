@@ -33,6 +33,14 @@ def test_drug_response_never_strong_from_clinvar_alone():
     assert level == "Moderate" and any("CPIC" in r for r in reasons)
 
 
+def test_truth_set_genotype_is_high_without_reads():
+    # The demo's truth VCF has no reads: graded by depth, every call would read as "thin support" (ADR-023 addendum)
+    assert ev.call_confidence(filter=".", gq=None, dp=None, vaf=None, zygosity="het")[0] == "Low"
+    level, why = ev.call_confidence(filter=".", gq=None, dp=None, vaf=None, zygosity="het", truth="test truth set")
+    assert level == "High" and "test truth set" in why[0] and "no reads" in why[0]
+    assert ev.call_confidence(filter="LowQual", gq=None, dp=None, vaf=None, zygosity="het", truth="t")[0] == "Low"
+
+
 def test_call_confidence_and_overall_is_weaker_grade():
     assert ev.call_confidence(filter="PASS", gq=40, dp=35, vaf=0.5, zygosity="het")[0] == "High"
     assert ev.call_confidence(filter="PASS", gq=25, dp=12, vaf=0.5, zygosity="het")[0] == "Medium"

@@ -419,10 +419,24 @@ def _ancestry(ctx: Context) -> dict:
             "haplogroups": {h["line"]: h["haplogroup"] for h in hap_rows}}
 
 
+LINEAGE_CONTIGS = {"chrM", "MT", "M", "chrMT", "chrY", "Y"}
+
+
 def _available(ctx: Context) -> str | None:
-    if not variants.vcf_file(ctx) and not (pgs.pgs_dir(ctx) / "pca" / "self.pcs").exists():
+    if (pgs.pgs_dir(ctx) / "pca" / "self.pcs").exists():
+        return None
+    if not variants.vcf_file(ctx):
         return "needs a VCF (haplogroups) or the PGS stage's ancestry PCA"
-    return None
+    if ctx.inv.first("cram") or ctx.inv.first("bam"):
+        return None
+    try:
+        lineage = LINEAGE_CONTIGS & set(reference.vcf_contigs(ctx))
+    except Exception:  # not indexed yet: let the stage find out
+        return None
+    # A truth set covering chromosomes 1-22 only (the demo) has nothing to place on a tree; writing empty tables
+    # would leave the page and its self-checks querying columns that don't exist
+    return None if lineage else ("needs the PGS stage's ancestry PCA, or mtDNA / Y-chromosome calls (this VCF has "
+                                 "none)")
 
 
 def _inputs(ctx: Context) -> list[Path]:

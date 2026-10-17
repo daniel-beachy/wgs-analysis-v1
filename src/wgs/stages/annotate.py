@@ -422,7 +422,8 @@ def _claims(ctx: Context, con, k: dict) -> int:
                                                      low_penetrance=bool(r["clinvar_low_penetrance"]),
                                                      gnomad_filtered=flagged)
         c_level, c_reasons = ev.call_confidence(filter=r["filter"], gq=r["gq"], dp=r["dp"], vaf=r["vaf"],
-                                                zygosity=r["zygosity"], provider=_provider_agrees(r))
+                                                zygosity=r["zygosity"], provider=_provider_agrees(r),
+                                                truth=ctx.cfg.truth.get("label") if ctx.cfg.truth else None)
         role, role_reason = ev.role(modes, r["zygosity"], r["chrom"])
         condition_roles = [{"name": c.name, "role": ev.role(set(c.modes), r["zygosity"], r["chrom"])[0]}
                            for c in conds if c.modes]
@@ -756,5 +757,6 @@ STAGE = Stage(
     inputs=_inputs,
     outputs=lambda ctx: [annotations_path(ctx), claims_path(ctx), summary_path(ctx)],
     available=_available,
-    params=lambda ctx: {"evidence_model": ev.MODEL_VERSION},
+    params=lambda ctx: {"evidence_model": ev.MODEL_VERSION,
+                        **({"truth": ctx.cfg.truth.get("label")} if ctx.cfg.truth else {})},
 )

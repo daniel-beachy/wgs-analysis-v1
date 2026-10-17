@@ -414,6 +414,8 @@ def build(ctx: Context) -> dict:
     content = {"schema": SCHEMA, "sample": ctx.sample, "pipeline_version": __version__,
                "tables": tables, "documents": documents,
                "knowledge": {"versions": knowledge["versions"], "evidence_model": knowledge["evidence_model"]}}
+    if ctx.cfg.truth:  # a demo built from a public truth set: the dashboard says whose genome this is (Step 9c)
+        content["truth_set"] = {k: str(ctx.cfg.truth[k]) for k in ("label", "version", "url") if ctx.cfg.truth.get(k)}
     digest = _key(json.dumps(content, sort_keys=True))
 
     idx_file = index_path(ctx)

@@ -9,6 +9,7 @@ import duckdb
 from ..pipeline import CANONICAL, Context, Stage, run
 
 QUERY_FMT = r"%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER\t%INFO/OLD\t[%GT\t%GQ\t%DP\t%AD\t%VAF]\n"
+SAMPLE_TAGS = ("GT", "GQ", "DP", "AD", "VAF")
 COLUMNS = {
     "chrom_raw": "VARCHAR", "pos": "BIGINT", "vid": "VARCHAR", "ref": "VARCHAR", "alt": "VARCHAR",
     "qual": "VARCHAR", "filter": "VARCHAR", "old": "VARCHAR", "gt": "VARCHAR", "gq": "VARCHAR",
@@ -42,6 +43,23 @@ def vcf_with_index(ctx: Context) -> str:
     return str(vcf) if own.exists() else f"{vcf}##idx##{vcf_index(ctx)}"
 
 
+def query_format(format_tags: set[str]) -> str:
+    """QUERY_FMT with '.' for the per-sample fields this VCF doesn't define. bcftools stops at an undefined tag, and
+    not every VCF has DeepVariant's: a truth set (Genome in a Bottle) has only GT and GQ in the demo input."""
+    fmt = QUERY_FMT
+    for tag in SAMPLE_TAGS:
+        if tag not in format_tags:
+            fmt = fmt.replace(f"%{tag}", ".")
+    return fmt
+
+
+def _format_tags(vcf: Path) -> set[str]:
+    import pysam
+
+    with pysam.VariantFile(str(vcf)) as vf:
+        return set(vf.header.formats)
+
+
 def _sql_num(col: str, typ: str) -> str:
     return f"TRY_CAST(NULLIF(NULLIF({col}, '.'), '') AS {typ})"
 
@@ -53,7 +71,7 @@ def build(ctx: Context) -> dict:
         run(["bcftools", "index", "-f", "-t", "--threads", "2", "-o", str(vcf_index(ctx)), str(vcf)], log=log)
     tsv = ctx.scratch / "variants.tsv"
     run(f"bcftools norm -m -any --old-rec-tag OLD --threads 2 -Ou '{vcf}' | "
-        f"bcftools query -f '{QUERY_FMT}' > '{tsv}'", shell=True, log=log)
+        f"bcftools query -f '{query_format(_format_tags(vcf))}' > '{tsv}'", shell=True, log=log)
 
     chrom_order = "CASE c " + " ".join(f"WHEN '{c}' THEN {i}" for i, c in enumerate(CANONICAL)) + " ELSE 99 END"
     out = variants_parquet(ctx)

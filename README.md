@@ -122,6 +122,26 @@ Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` fold
 
 **Rebuilding the dashboard** (after changing `viewer/` or `launcher/`, on the Mac): `pixi run build-dashboard`. It builds the viewer and both launchers in internal scratch space (exFAT can't hold npm's symlinks) and copies the results next to `wgs-data/`. For live development: `cd $TMPDIR/wgs-build/viewer && WGS_RELEASES=<path to wgs-data/releases> npx vite` after one build.
 
+## Demo release (shareable, no personal data)
+
+`config/demo.toml` builds a second workspace, `wgs-data-demo/`, from Genome in a Bottle's HG002 truth VCF (v4.2.1, GRCh37) instead of your genome. HG002 is a reference genome shared openly through the Personal Genome Project, so the demo can be shown to anyone. Every page carries a banner saying it shows HG002, not the dashboard owner. It borrows the knowledge store (read-only) and the rebuilt reference from `wgs-data/`, so it needs a normal run and the `giab` knowledge source first.
+
+```bash
+pixi run demo                                                      # prepare the input, then run every stage
+pixi run wgs --config config/demo.toml demo --only annotate --force annotate   # one stage
+pixi run wgs --config config/demo.toml query                       # query the demo release
+```
+
+`wgs demo` keeps only the truth set's confident regions, renames contigs to `chr…` and drops every per-sample field except the genotype and its quality: the truth set's depths are summed over many sequencing runs and would read as one run's reads. With no reads, the callable map is the confident regions, and call confidence follows a truth-set rule instead of read depth (ADR-023 addendum). The truth set covers chromosomes 1–22 only, so there is no sex inference and no haplogroups. Stages that need reads or the provider's genotype file skip with a reason: `genotypes`, `fastq_stats`, `alignment_stats`, `reference_full`, `cyp2d6`, `hla`, `special`, `recount` and `secondcall`. Polygenic scores (and the ancestry estimate built on their PCA) are left out by default because the 1000 Genomes panel has to be scored for this genome's positions, which takes hours; add `--pgs` to include them.
+
+Open it with the same launcher, pointed at the demo folder. It picks a different port when your own dashboard is already open, so the two never mix:
+
+```bash
+open -a "../Genome Dashboard.app" --args -data "$PWD/../wgs-data-demo"
+```
+
+On Windows: `"Genome Dashboard.exe" -data wgs-data-demo` from the `Genomics` folder.
+
 ## About the reference genome
 
 A CRAM file stores only how your reads differ from a reference genome. Each block also records an MD5 fingerprint of the reference used to compress it. tellmeGen did not ship that reference, so `wgs run --only reference` rebuilds it from Ensembl GRCh37 release 75. It checks the download against Ensembl's published checksum and renames contigs to match the CRAM, and N-masks the chrY PARs. It then proves the result:

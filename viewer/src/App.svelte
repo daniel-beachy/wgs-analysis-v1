@@ -60,6 +60,15 @@
       <a href={`#/${s.id}`} class:active={def.id === s.id} class:soon={!s.ready} onclick={(e) => { e.preventDefault(); go(s.id); }}>{s.icon} {s.title}</a>
     {/each}
   </nav>
+  {#if m?.truth_set}
+    <div class="demo" role="note">
+      <strong>Demo</strong>
+      <span>This dashboard shows <b>{m.sample}</b>, a reference genome shared openly through the Personal Genome
+        Project, not the dashboard owner's genome. Its genotypes are the
+        {#if m.truth_set.url}<a href={m.truth_set.url} target="_blank" rel="noreferrer">{m.truth_set.label}</a>{:else}{m.truth_set.label}{/if}
+        inside its confident regions; with no raw reads, the read-based checks are left out.</span>
+    </div>
+  {/if}
 </header>
 
 <main>
@@ -85,7 +94,7 @@
 
 <footer class="small faint">
   <p>For learning and curiosity — not a medical test or diagnosis. Discuss anything health-related with a clinician and confirm with a clinical-grade test.
-    Runs entirely on this computer; your genome never leaves it. · <a href={PORTFOLIO} target="_blank" rel="noreferrer">daniel-beachy.github.io</a></p>
+    {#if m?.truth_set}Demo built from public reference data (HG002, Genome in a Bottle).{:else}Runs entirely on this computer; your genome never leaves it.{/if} · <a href={PORTFOLIO} target="_blank" rel="noreferrer">daniel-beachy.github.io</a></p>
 </footer>
 
 <style>
@@ -103,5 +112,11 @@
   main { max-width: 1400px; margin: 0 auto; padding: 22px 24px 40px; }
   footer { max-width: 1400px; margin: 0 auto; padding: 0 24px 30px; }
   .sample { padding-top: 2px; }
+  .demo { display: flex; gap: 10px; align-items: baseline; max-width: 1400px; margin: 0 auto; padding: 7px 24px;
+    font-size: 0.85rem; color: var(--text); background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  .demo strong { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--bg);
+    font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  @media (max-width: 700px) { .demo { padding: 6px 16px; font-size: 0.8rem; } }
   @media (max-width: 700px) { .sample { display: none; } }
 </style>

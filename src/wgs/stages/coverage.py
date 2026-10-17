@@ -34,7 +34,40 @@ def outputs(ctx: Context) -> list[Path]:
     return [d / "coverage_windows.parquet", d / "callable.parquet", d / "coverage.json"]
 
 
+def _stage_outputs(ctx: Context) -> list[Path]:
+    """A truth set has no reads, so only the callable map is made (other stages index `outputs`)."""
+    return [out_dir(ctx) / "callable.parquet"] if _truth_mode(ctx) else outputs(ctx)
+
+
+def _truth_mode(ctx: Context) -> bool:
+    """A truth-set VCF with no reads: its confident regions are where 'no variant' means reference (ADR-023)."""
+    return bool(ctx.cfg.truth) and not (ctx.inv.first("cram") or ctx.inv.first("bam"))
+
+
+def _truth_regions(ctx: Context) -> Path | None:
+    from ..demo import truth_inputs
+
+    p = truth_inputs(ctx.cfg)["regions"]
+    return p if p and p.exists() else None
+
+
+def build_from_truth(ctx: Context) -> dict:
+    """The truth set's confident regions become the callable map: GIAB vouches that every position inside them
+    without a variant record is homozygous reference. Outside them nothing is known, so nothing is written."""
+    bed, out = _truth_regions(ctx), out_dir(ctx) / "callable.parquet"
+    con = duckdb.connect()
+    con.execute(f"""COPY (SELECT regexp_replace(column0, '^chr', '') AS chrom, column1::INTEGER AS start,
+                         column2::INTEGER AS "end", 'CALLABLE' AS state
+                  FROM read_csv('{bed}', delim='\t', header=false, columns={{'column0': 'VARCHAR',
+                       'column1': 'BIGINT', 'column2': 'BIGINT'}}) ORDER BY 1, 2)
+                  TO '{out}' (FORMAT parquet, COMPRESSION zstd)""")
+    bp = con.execute(f"SELECT sum(\"end\" - start) FROM '{out}'").fetchone()[0]
+    return {"source": "truth-set confident regions", "callable_bp": {"CALLABLE": int(bp or 0)}}
+
+
 def build(ctx: Context) -> dict:
+    if _truth_mode(ctx):
+        return build_from_truth(ctx)
     cram = ctx.inv.first("cram") or ctx.inv.first("bam")
     fasta = reference_fasta(ctx)
     # mosdepth's raw outputs are kept in the workspace so a summary change never needs the 25-minute rerun.
@@ -122,6 +155,8 @@ def acgt_lengths(fasta: Path) -> dict[str, int]:
 
 
 def _available(ctx: Context) -> str | None:
+    if _truth_mode(ctx):
+        return None if _truth_regions(ctx) else "the truth set's confident regions were not found"
     if not (ctx.inv.first("cram") or ctx.inv.first("bam")):
         return "no CRAM/BAM found"
     if ctx.inv.first("cram") and not reference_fasta(ctx):
@@ -131,6 +166,7 @@ def _available(ctx: Context) -> str | None:
 
 STAGE = Stage(
     name="coverage", version="2", title="Read coverage (mosdepth)", fn=build,
-    inputs=lambda ctx: [f.path for f in (ctx.inv.of("cram") or ctx.inv.of("bam"))[:1]],
-    outputs=outputs, available=_available,
+    inputs=lambda ctx: [_truth_regions(ctx)] if _truth_mode(ctx)
+    else [f.path for f in (ctx.inv.of("cram") or ctx.inv.of("bam"))[:1]],
+    outputs=_stage_outputs, available=_available,
 )

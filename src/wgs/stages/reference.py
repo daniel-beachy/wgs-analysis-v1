@@ -174,7 +174,42 @@ def _md5s(fasta: Path) -> dict[str, str]:
     return out
 
 
+def vcf_contigs(ctx: Context) -> dict[str, int | None]:
+    """Contigs that hold records in the VCF, with the length its header gives (None when it gives none)."""
+    import pysam
+
+    from .variants import vcf_file, vcf_with_index
+
+    res = run(["bcftools", "index", "-s", vcf_with_index(ctx)], capture=True)
+    used = [ln.split("\t")[0] for ln in res.stdout.splitlines() if ln.strip()]
+    with pysam.VariantFile(str(vcf_file(ctx))) as vf:
+        lengths = {c: vf.header.contigs[c].length for c in vf.header.contigs}
+    return {c: lengths.get(c) for c in used}
+
+
+def covers(fai: dict[str, int], want: dict[str, int | None]) -> bool:
+    return bool(want) and all(c in fai and (ln is None or fai[c] == ln) for c, ln in want.items())
+
+
+def _build_vcf_only(ctx: Context) -> dict:
+    """No reads to decode: accept a provided FASTA only if it has the VCF's contigs and every VCF REF allele."""
+    want = vcf_contigs(ctx)
+    candidate = next((f.path for f in ctx.inv.of("reference") if covers(fai_contigs(f.path), want)), None)
+    if candidate is None:
+        raise RuntimeError(f"No provided reference FASTA (with a .fai index) has the VCF's contigs "
+                           f"({', '.join(list(want)[:5])}…)")
+    vcf_check = _verify_vcf(ctx, candidate)
+    if vcf_check.get("vcf_ref_mismatches"):
+        raise RuntimeError(f"{vcf_check['vcf_ref_mismatches']} VCF REF alleles disagree with the reference")
+    info = {"fasta": str(candidate), "origin": "provided; every REF allele in the VCF checked (no reads to decode)",
+            "contigs": len(want), **vcf_check, "md5": _md5s(candidate)}
+    write_json(ready_file(ctx), info)
+    return {k: v for k, v in info.items() if k != "md5"}
+
+
 def build(ctx: Context) -> dict:
+    if not (ctx.inv.first("cram") or ctx.inv.first("bam")):
+        return _build_vcf_only(ctx)
     want = cram_contigs(ctx)
     candidate = None
     for f in ctx.inv.of("reference"):
@@ -198,13 +233,25 @@ def build(ctx: Context) -> dict:
 
 def _available(ctx: Context) -> str | None:
     if not (ctx.inv.first("cram") or ctx.inv.first("bam")):
-        return "no CRAM/BAM found (the reference is only needed to decode reads)"
+        from .variants import vcf_file
+
+        if vcf_file(ctx) and ctx.inv.of("reference"):
+            return None  # VCF-only: check a provided FASTA against the VCF's REF alleles
+        return "no CRAM/BAM found, and no GRCh37 FASTA given as [inputs] reference to check against the VCF"
     return None
+
+
+def _inputs(ctx: Context) -> list[Path]:
+    if ctx.inv.of("cram") or ctx.inv.of("bam"):
+        return [f.path for f in ctx.inv.of("cram")]
+    from .variants import vcf_file
+
+    return [vcf_file(ctx), *(f.path for f in ctx.inv.of("reference"))]
 
 
 STAGE = Stage(
     name="reference", version="1", title="Reference genome (find / rebuild + verify against CRAM)", fn=build,
-    inputs=lambda ctx: [f.path for f in ctx.inv.of("cram")],
+    inputs=_inputs,
     outputs=lambda ctx: [ready_file(ctx)],
     available=_available,
 )
