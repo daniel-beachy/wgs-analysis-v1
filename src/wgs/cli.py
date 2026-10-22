@@ -469,3 +469,24 @@ def mcp_cmd():
     from .mcp_server import serve
 
     serve(_cfg().releases_dir)
+
+
+@app.command("export-site")
+def export_site_cmd(out: Path = typer.Option(..., "--out", "-o", help="Folder to write; the data goes in <out>/data.")):
+    """Copy the demo release as static files for a web host (truth-set releases only; ADR-028)."""
+    from . import site
+
+    cfg = _cfg()
+    forbidden = list(cfg.forbidden_strings)
+    personal = REPO_ROOT / DEFAULT_CONFIG_NAME
+    if personal.is_file():
+        own = load_config(personal)
+        forbidden += [*own.forbidden_strings, *([own.sample] if own.sample else [])]
+    try:
+        res = site.export(cfg.releases_dir, out, forbidden)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1) from None
+    split = ", ".join(f"{t} in {n} parts" for t, n in res["split"].items()) or "nothing split"
+    console.print(f"Exported release {res['release']}: {res['files']} files, {human(res['bytes'])} "
+                  f"(largest {human(res['largest'])}; {split}) → {out / 'data'}")

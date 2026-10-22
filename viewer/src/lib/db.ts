@@ -3,7 +3,7 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import eh_wasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 import type { Manifest } from './data';
-import { tableUrl } from './data';
+import { tableUrls } from './data';
 
 let dbp: Promise<duckdb.AsyncDuckDB> | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -36,7 +36,8 @@ export async function useRelease(m: Manifest): Promise<void> {
   const d = await db();
   conn ??= await d.connect();
   for (const name of Object.keys(m.tables)) {
-    await conn.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet('${tableUrl(m, name)!}')`);
+    const files = tableUrls(m, name).map((u) => `'${u}'`).join(', ');
+    await conn.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet([${files}])`);
   }
   registered = m.id;
 }

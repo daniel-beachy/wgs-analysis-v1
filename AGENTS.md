@@ -216,6 +216,7 @@ pixi run wgs knowledge status       # versions of ClinVar, gnomAD, ClinGen, …
 pixi run wgs knowledge refresh      # fetch newer knowledge, then `wgs run`
 pixi run build-dashboard            # rebuild the viewer app
 pixi run demo                       # rebuild the HG002 demo release (config/demo.toml)
+pixi run demo-site                  # publish the HG002 demo on GitHub Pages (ADR-028)
 ```
 
 The demo config shows two options a normal config doesn't need: `[paths]

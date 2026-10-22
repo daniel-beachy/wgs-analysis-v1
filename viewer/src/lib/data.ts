@@ -1,6 +1,10 @@
 // Release discovery: the launcher serves the workspace `releases/` folder at ./data/.
 
-export interface ObjectRef { path: string; bytes: number; sha256: string; rows?: number; description?: string }
+export interface ObjectRef {
+  path: string; bytes: number; sha256: string; rows?: number; description?: string;
+  /** A table split by chromosome for a static web host (`wgs export-site`, ADR-028): read every part. */
+  parts?: ObjectRef[];
+}
 export interface ReleaseEntry { id: string; sample: string; created: string; digest: string; manifest: string; previous: string | null; summary?: string; knowledge?: Record<string, string> }
 export interface Index { schema: number; releases: ReleaseEntry[]; latest: string }
 export interface Manifest {
@@ -11,6 +15,8 @@ export interface Manifest {
   knowledge: { versions?: Record<string, string>; evidence_model?: string | null };
   /** Set when the release was built from a public truth set (the demo, Step 9c), not a personal genome. */
   truth_set?: { label: string; version?: string; url?: string };
+  /** Set on the public web copy of the demo: what was left out or split (ADR-028). */
+  export?: { created: string; from_release: string; dropped_columns: Record<string, Record<string, string>>; split: Record<string, number> };
 }
 
 export const DATA = new URL('./data/', document.baseURI).href;
@@ -37,15 +43,20 @@ export async function loadAudit(m: Manifest): Promise<any | null> {
   try { return await getJSON(`audits/${m.id}.json`); } catch { return null; }
 }
 
-export function tableUrl(m: Manifest, name: string): string | null {
+export function tableUrls(m: Manifest, name: string): string[] {
   const ref = m.tables[name];
-  return ref ? DATA + ref.path : null;
+  return ref ? (ref.parts ?? [ref]).map((p) => DATA + p.path) : [];
 }
 
-// Tell the launcher the tab is still open; it exits a while after the last tab closes.
+// Tell the launcher the tab is still open; it exits a while after the last tab closes. A static web host has no
+// launcher, so the first refused beat stops the timer.
 export function startHeartbeat() {
-  const beat = () => fetch('./api/heartbeat', { method: 'POST' }).catch(() => {});
+  let timer = 0;
+  const beat = () => fetch('./api/heartbeat', { method: 'POST' })
+    .then((r) => { if (!r.ok) { clearInterval(timer); window.removeEventListener('pagehide', bye); } })
+    .catch(() => {});
+  const bye = () => navigator.sendBeacon?.('./api/bye');
+  timer = window.setInterval(beat, 10_000);
+  window.addEventListener('pagehide', bye);
   beat();
-  setInterval(beat, 10_000);
-  window.addEventListener('pagehide', () => navigator.sendBeacon?.('./api/bye'));
 }

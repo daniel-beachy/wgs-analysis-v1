@@ -20,7 +20,7 @@ and learn from for a decade:
   geneticist.
 - Every place the genome reliably differs from a typical one, what it means and how sure we are, Strong to Limited.
 - Also run on Genome in a Bottle (HG002) to check accuracy.
-- Hosting is local-only for now (if ever: GitHub Pages; Cloudflare free tier only).
+- Hosting: the dashboard itself is local-only; the HG002 demo is public on GitHub Pages (ADR-028).
 
 ## How to work here
 
@@ -85,6 +85,7 @@ and learn from for a decade:
 - Polygenic scores: the selection-rule change (prefer more independent evaluations) and an R²-above-heritability flag
   need a new multi-hour scoring run; scoring every catalog score per trait likewise (ADR-019).
 - Finer-scale ancestry (HGDP + 1000 Genomes) is a later, separate step (ADR-020).
-- Hosting and the portfolio card: after step 12, publish the HG002 demo (never the owner's release) as static
-  files. The demo's `annotations` file is 137 MB, over GitHub Pages' 100 MB and Cloudflare Pages' 25 MB per-file
-  limits, so it must be trimmed or split first.
+- The public demo (ADR-028): `pixi run demo` rebuilds the HG002 release, then `pixi run demo-site` exports a trimmed
+  copy (truth-set releases only), uploads it as a `demo-data-<id>` release asset and deploys
+  https://daniel-beachy.github.io/wgs-analysis-v1/. The portfolio card lives in `~/AI_PROJECTS/portfolio-site`
+  (follow its AGENTS.md).

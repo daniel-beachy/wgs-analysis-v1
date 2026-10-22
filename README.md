@@ -45,6 +45,7 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 | `wgs audit [--only curated]` | Re-checks the newest release against live ClinVar, GWAS Catalog, PGS Catalog, PubMed, source links and every cited baseline quote (needs internet; summary shown on the Data quality tab) |
 | `wgs query "<SQL>"` | Read-only SQL against the newest release (`claims`, `annotations`, `variants`, …); `-` reads SQL from stdin |
 | `wgs mcp` | The same read-only access for an AI assistant that speaks MCP (Claude Code, Claude Desktop, …); the assistant starts it, see below |
+| `wgs export-site --out DIR` | A trimmed web copy of the demo release for a static host (demo config only; `pixi run demo-site` publishes it) |
 
 More commands are added as each development step lands (see `docs/PLAN.md`).
 
@@ -166,6 +167,8 @@ open -a "../Genome Dashboard.app" --args -data "$PWD/../wgs-data-demo"
 ```
 
 On Windows: `"Genome Dashboard.exe" -data wgs-data-demo` from the `Genomics` folder.
+
+**Online:** the demo also runs at <https://daniel-beachy.github.io/wgs-analysis-v1/>, straight from GitHub Pages: DuckDB in the browser reads the tables with range requests, so nothing is installed and nothing is sent back. `pixi run demo-site` publishes the newest demo release there ([ADR-028](docs/DECISIONS.md)). It exports a web copy that refuses any non-demo release, leaves out a few columns (bulk REVEL and AlphaMissense scores, whose licences are non-commercial, and columns no page shows), and splits the big tables by chromosome. It then uploads the copy as a release asset (the repo itself holds no genomic data) and starts `.github/workflows/pages.yml`, which builds the viewer and deploys both. Pushing a change under `viewer/` redeploys too.
 
 ## About the reference genome
 
