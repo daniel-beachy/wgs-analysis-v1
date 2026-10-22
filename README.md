@@ -41,6 +41,7 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 | `wgs verify-inputs` | Checks inputs against `MANIFEST.sha256` (reads everything, so it is slow) |
 | `wgs run` | Runs or resumes every pipeline stage and publishes a new dashboard release |
 | `wgs knowledge status` / `refresh` | Shows or updates the public knowledge versions (ClinVar, gnomAD, ClinGen, …) |
+| `wgs refresh [--pgs]` | Updates the knowledge, re-runs what it affects and publishes a release with a "What changed" report; polygenic-score sources only with `--pgs` (hours) |
 | `wgs audit [--only curated]` | Re-checks the newest release against live ClinVar, GWAS Catalog, PGS Catalog, PubMed, source links and every cited baseline quote (needs internet; summary shown on the Data quality tab) |
 | `wgs query "<SQL>"` | Read-only SQL against the newest release (`claims`, `annotations`, `variants`, …); `-` reads SQL from stdin |
 
@@ -70,14 +71,15 @@ Stages: `variants` (VCF → Parquet), `genotypes` (provider raw genotypes), `ref
 Interpretation uses public databases downloaded to `wgs-data/knowledge/`. Your variants are never sent online ([ADR-012](docs/DECISIONS.md)).
 
 ```bash
+pixi run wgs refresh                          # the routine: update the knowledge, re-run, publish (about 20 minutes)
 pixi run wgs knowledge status                 # which versions you have and when they were checked
-pixi run wgs knowledge refresh                # download only sources that changed upstream (about 4 GB the first time)
+pixi run wgs knowledge refresh                # only download sources that changed upstream (about 4 GB the first time)
 pixi run wgs knowledge refresh --source clinvar --pin clinvar=20251006   # reproduce an archived ClinVar
 pixi run wgs run                              # re-annotate and publish; a new release only if something changed
 pixi run wgs audit                            # confirm every cited record and quote still says what we show
 ```
 
-The dashboard's **What changed** tab then shows which sources moved to a new version, which findings were added, removed or regraded, and every variant whose ClinVar classification changed. A sensible routine is to refresh monthly. Every finding carries an evidence grade and a call-confidence grade, each with reasons ([ADR-013](docs/DECISIONS.md), and the "How this project grades its confidence" section of the [primer](docs/GENETICS_PRIMER.md)).
+`wgs refresh` leaves the polygenic-score sources (PGS Catalog and its 1000 Genomes reference scoring) alone unless you add `--pgs`, because re-scoring the reference panel takes hours. The dashboard's **What changed** tab then shows which sources moved to a new version; which findings were added, removed or regraded, each with the source updates behind it ("Because: ClinVar 2026-10-04 → 2026-10-19"); other results that moved (medicine genes, polygenic percentiles, ancestry shares, haplogroups, hard-to-read genes, repeats); and every variant whose ClinVar classification changed ([ADR-024](docs/DECISIONS.md)). A sensible routine is to refresh monthly. Every finding carries an evidence grade and a call-confidence grade, each with reasons ([ADR-013](docs/DECISIONS.md), and the "How this project grades its confidence" section of the [primer](docs/GENETICS_PRIMER.md)).
 
 ### Knowledge sources
 
@@ -114,7 +116,7 @@ AlphaMissense and REVEL are licensed for non-commercial use, which this personal
 
 ## Opening the dashboard (any machine, nothing to install)
 
-Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` folder (`.app` on a Mac, `.exe` on Windows). Your browser opens on a local page (`http://127.0.0.1:8787`); the program quits by itself about a minute after you close the tab. Everything runs on your computer — no internet needed, nothing is uploaded.
+Plug in the drive and double-click **`Genome Dashboard`** in the `Genomics` folder (`.app` on a Mac; the Windows `.exe` is built too but hasn't been tested on a Windows machine). Your browser opens on a local page (`http://127.0.0.1:8787`); the program quits by itself about a minute after you close the tab. Everything runs on your computer — no internet needed, nothing is uploaded.
 
 - **First launch on a Mac:** if macOS says it can't verify the developer, right-click the app → **Open** → **Open** (only needed once per machine). Files copied by Finder from the internet get this flag; files built locally don't.
 - **First launch on Windows:** if SmartScreen appears, click **More info → Run anyway**.

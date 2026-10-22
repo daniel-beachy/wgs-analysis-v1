@@ -360,9 +360,9 @@ How call confidence is set: DeepVariant must call it PASS. Then a genotype quali
 
 Your DNA doesn't change, but knowledge about it does. ClinVar alone is updated weekly, and thousands of variants are **reclassified** every year (most often from "uncertain" to "benign"). So nothing here is a one-off snapshot:
 
-1. **Knowledge sources are versioned.** `wgs knowledge refresh` checks each source (ClinVar, Ensembl genes, ClinGen, 1000 Genomes, gnomAD) for a newer version. It downloads only what changed and keeps the last few versions.
+1. **Knowledge sources are versioned.** `wgs refresh` checks each source (ClinVar, Ensembl genes, ClinGen, 1000 Genomes, gnomAD, …) for a newer version, downloads only what changed, keeps the last few versions, and re-runs whatever the new versions affect.
 2. **Each pipeline run is a release** that records exactly which knowledge versions and grading rules it used.
-3. **Each release stores a diff** against the release before it. The *What changed* tab shows sources that moved to a new version, findings added, removed or regraded, and every variant of yours whose ClinVar classification changed.
+3. **Each release stores a diff** against the release before it. The *What changed* tab shows sources that moved to a new version, findings added, removed or regraded, other results that moved (medicine genes, polygenic percentiles, ancestry), and every variant of yours whose ClinVar classification changed. Each change names its likely cause: the sources it was built from that were updated, or a change to the grading rules. A change with no named cause came from the pipeline or your own data files.
 
 The joining happens on your own computer. Your variants are never sent to an online service.
 

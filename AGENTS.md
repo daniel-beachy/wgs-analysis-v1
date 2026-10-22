@@ -66,7 +66,11 @@ FROM annotations WHERE gene = 'GJB2';
 -- Was a position looked at, and how well? (absence of a variant ≠ "normal" if not callable)
 SELECT * FROM callable WHERE chrom = '13' AND start <= 20763686 AND "end" > 20763686;
 
--- What changed in the last refresh
+-- The most notable results, strongest first, and where each came from
+SELECT rank, kind, title, overall, notable_because, ref_table, ref_key FROM highlights ORDER BY rank;
+
+-- What changed in the last refresh: findings (claims.added/removed/changed) and other results (results.items),
+-- each with `why` = the knowledge sources behind it that were updated (or "evidence_model")
 SELECT * FROM doc_changes;
 
 -- How accurate are the checks (Genome in a Bottle HG002), and what did a second caller find in your reads?
@@ -78,6 +82,7 @@ SELECT gene, chrom, pos, ref, alt, verdict, population, vcf_filter FROM second_c
 
 | Table | One row is… | Notes |
 |---|---|---|
+| `highlights` | one notable result picked from another table by a fixed rule (ADR-025) | **The overview.** `rank` (Strong → Limited), `kind`, `title`, `statement`, `notable_because` (the rule that picked it), grades copied from the source row, `ref_table` + `ref_key` (the row it came from: look it up there for the full evidence), `sensitive`, `sources` |
 | `claims` | one graded statement about the person | **Start here.** Everything the dashboard shows as a finding. |
 | `annotations` | one of the person's variant alleles + what is known about it | gene effect, ClinVar, population frequencies, predictor scores |
 | `variants` | one variant call from the VCF | quality fields: `gq`, `dp`, `ad_ref`, `ad_alt`, `vaf`, `filter` |
@@ -135,6 +140,12 @@ Coordinates are **GRCh37/hg19** with chromosome names without `chr`.
 Ancestry is similarity to present-day reference people, not a family history: quote shares with their noise floor, say when the nearest population is a group the method can't separate (`doc_ancestry.nearest.group`), and remember a haplogroup is one line of ancestors out of thousands.
 
 The release also has a `checks` document (`checks.json`): automatic self-checks. If any failed, say so before relying on the rows they name.
+
+A release may have a `take` document (`doc_take`): **Claude's take**, an AI-written reading of the highlights
+(ADR-026). It is opinion, not a finding: each paragraph cites results as `[[table:key]]`, the pipeline checks that
+every citation exists, and `stale` is true when a cited result has changed since it was written. Quote the cited
+rows and their grades, not the take's wording. To write or update one, see ADR-026 (it lives outside the repo, in
+`<workspace>/notes/take.md`).
 
 ## 4. Documents to lean on
 

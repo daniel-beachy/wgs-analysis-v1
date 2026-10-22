@@ -23,7 +23,6 @@ import hashlib
 import shutil
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import duckdb
 import pandas as pd
@@ -63,11 +62,10 @@ def merge(intervals: list[tuple[str, int, int]]) -> list[tuple[str, int, int]]:
     return [tuple(x) for x in out]
 
 
-def regions(workspace: Path) -> list[tuple[str, int, int]]:
+def regions(st: Store) -> list[tuple[str, int, int]]:
     """ACMG SF exons (MANE Select) and PharmCAT defining positions, ±PAD, chromosomes 1-22 (the truth set's span)."""
     from ..stages.special import panel_exons
 
-    st = Store(SimpleNamespace(workspace=workspace))
     iv = [(e["chrom"], int(e["start"]) - 1 - PAD, int(e["end"]) + PAD) for e in panel_exons(st)]
     pos = st.table("pharmcat", "positions")
     if pos:
@@ -141,7 +139,7 @@ class Giab(Source):
         ups = [head(TRUTH + ".vcf.gz"), head(TRUTH + ".vcf.gz.tbi"), head(TRUTH + "_noinconsistent.bed")]
         ups += [head(STRAT + f) for f in REASONS.values()]
         reads = head(READS)
-        reads.etag = f"{_fingerprint(regions(self.workspace))}|{DEPTH}x|{PAD}"
+        reads.etag = f"{_fingerprint(regions(self.store))}|{DEPTH}x|{PAD}"
         return ups + [reads]
 
     def build(self, upstream: list[Upstream], scratch: Path, out: Path) -> Built:
@@ -162,7 +160,7 @@ class Giab(Source):
             FROM read_csv('{out / "confident.bed"}', delim='\t', header=false,
                           columns={{'chrom': 'VARCHAR', 'start': 'BIGINT', 'end': 'BIGINT'}}))
             TO '{confident}' (FORMAT parquet)""")
-        iv = regions(self.workspace)
+        iv = regions(self.store)
         if upstream[-1].etag and not upstream[-1].etag.startswith(_fingerprint(iv)):
             raise RuntimeError("the gene regions changed between checking and building; refresh again")
         if not iv:

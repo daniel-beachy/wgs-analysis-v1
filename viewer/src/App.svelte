@@ -15,6 +15,7 @@
   import Traits from './sections/Traits.svelte';
   import Brain from './sections/Brain.svelte';
   import Ancestry from './sections/Ancestry.svelte';
+  import Highlights from './sections/Highlights.svelte';
 
   const PORTFOLIO = 'https://daniel-beachy.github.io';
   let theme = $state(localStorage.getItem('theme') ?? 'dark');
@@ -88,6 +89,7 @@
   {:else if def.id === 'traits' && (m.tables.trait_snps || m.tables.pgs_scores)}<Traits {m} {def} {sex} />
   {:else if def.id === 'brain' && (m.tables.brain_variants || m.tables.pgs_scores)}<Brain {m} {def} {sex} />
   {:else if def.id === 'ancestry' && (m.tables.ancestry_components || m.tables.haplogroups)}<Ancestry {m} {def} {sex} />
+  {:else if def.id === 'highlights' && m.tables.highlights}<Highlights {m} {def} />
   {:else}<Upcoming {def} {m} status={sections.find((x) => x.id === (def.module ?? def.id))} />
   {/if}
 </main>

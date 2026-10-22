@@ -53,3 +53,21 @@ def test_unpinning_reuses_stored_version(tmp_path, monkeypatch):
     monkeypatch.setattr(fake, "build", lambda *a: built.append(1))
     assert knowledge.refresh(cfg, tmp_path / "scratch")["fake"] == "updated (v1)"
     assert not built and Store(cfg).versions() == {"fake": "v1"}
+
+
+def test_sources_built_from_other_sources_get_the_store_being_refreshed(tmp_path, monkeypatch):
+    # The GIAB source reads the gene regions from the Ensembl/MANE/PharmCAT tables in the same store. It used to make
+    # its own Store from a stand-in config, which broke once the store's folder came from `knowledge_dir` (Step 9c).
+    from wgs.knowledge import giab
+
+    cfg = Config(workspace=tmp_path / "ws", search=[tmp_path])
+    seen = []
+
+    class Reader(Fake):
+        def probe(self, pin=None):
+            seen.append(giab.regions(self.store))
+            return super().probe(pin)
+
+    monkeypatch.setattr("wgs.knowledge.registry.SOURCES", [Reader()])
+    assert knowledge.refresh(cfg, tmp_path / "scratch")["fake"] == "updated (v1)"
+    assert seen == [[]]  # an empty store has no exons or positions yet, and says so instead of failing

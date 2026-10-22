@@ -12,7 +12,7 @@ Turn one person's 30× whole genome (tellmeGen: FASTQ, CRAM, VCF, CSVs in `../WG
 and learn from for a decade:
 - Point at files anywhere; degrade gracefully when files or tools are missing; never require Linux-only tools.
 - A durable, portable on-disk artifact (immutable releases) and a dashboard that runs from the external drive on an
-  Apple Silicon Mac and a Windows x64 laptop.
+  Apple Silicon Mac (Windows was dropped on 2026-10-22; the launcher still cross-compiles an untested `.exe`).
 - Interpretation is the hard part: every finding says what evidence underpins it, how sure we are, and links to its
   exact source; impact in absolute terms ("26 in 100 vs 13 typical") where sourced, otherwise "not established".
 - Not a snapshot: knowledge refreshes, and "What changed" shows the difference.

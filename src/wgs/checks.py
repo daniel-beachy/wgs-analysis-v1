@@ -318,6 +318,19 @@ CHECKS: list[Check] = [
           "or squeezed set points to a systematic genotyping or scaling error rather than biology.", ("pgs_scores",),
           """SELECT 'mean z ' || round(avg(z), 2) || ', SD ' || round(stddev(z), 2) FROM pgs_scores
              WHERE z IS NOT NULL HAVING count(*) >= 20 AND (abs(avg(z)) > 0.5 OR stddev(z) NOT BETWEEN 0.6 AND 1.5)"""),
+    Check("highlights.match_source", "Every highlight points at a real finding and keeps its grade",
+          "A highlight repeats a finding from another section; if it named a missing row or showed a stronger "
+          "grade than that row, the summary page would overstate the evidence.", ("highlights", "claims"),
+          """SELECT h.ref_table || ':' || h.ref_key FROM highlights h
+             LEFT JOIN claims c ON h.ref_table = 'claims' AND c.claim_id = h.ref_key
+             WHERE h.ref_table = 'claims' AND (c.claim_id IS NULL OR c.overall IS DISTINCT FROM h.overall
+               OR c.evidence_level IS DISTINCT FROM h.evidence_level)"""),
+    Check("highlights.complete", "Every highlight has a grade, a reason and a source",
+          "A highlight without a reason or a source can't be checked; one without a grade can't be ranked.",
+          ("highlights",),
+          """SELECT coalesce(title, highlight_id) FROM highlights WHERE overall IS NULL OR notable_because IS NULL
+             OR statement IS NULL OR ref_key IS NULL OR sources IS NULL OR sources IN ('', '[]')
+             UNION ALL SELECT highlight_id FROM highlights GROUP BY highlight_id HAVING count(*) > 1"""),
     Check("pgs.never_strong", "Polygenic scores are never graded Strong",
           "A score shifts odds modestly; it is capped below Strong by the evidence model.", ("pgs_scores",),
           "SELECT pgs_id FROM pgs_scores WHERE evidence_level = 'Strong' OR overall = 'Strong'"),

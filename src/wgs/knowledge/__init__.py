@@ -56,6 +56,7 @@ class Source:
     description: str = ""
     schema: int = 1                    # bump when build() output changes, so stored versions are rebuilt
     workspace: Path = Path(".")        # set by refresh(); lets a build reuse files in <workspace>/cache
+    store: Store | None = None         # set by refresh(); the store being refreshed, for sources built from others
 
     def probe(self, pin: str | None = None) -> list[Upstream]:
         raise NotImplementedError
@@ -176,6 +177,7 @@ def refresh(cfg: Config, scratch: Path, only: list[str] | None = None, pin: dict
             continue
         p = (pin or {}).get(src.id)
         src.workspace = cfg.workspace
+        src.store = store
         try:
             up = src.probe(p)
             cur = store.current(src.id)

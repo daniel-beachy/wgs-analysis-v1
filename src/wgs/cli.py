@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -361,6 +362,48 @@ def knowledge_refresh(
         raise typer.Exit(1)
 
 
+# Refreshing these can change which polygenic scores are selected, and a new score means hours of scoring the
+# 1000 Genomes reference panel, so `wgs refresh` leaves them alone unless asked (Step 10).
+SLOW_SOURCES = ("pgs_catalog", "pgs_reference")
+
+
+@app.command("refresh")
+def refresh_cmd(
+    pgs: bool = typer.Option(False, "--pgs", help="Also refresh the polygenic-score catalog (a new score can mean "
+                                                  "hours of reference scoring)."),
+    threads: int = typer.Option(0, help="Worker threads (default: CPU count - 2)."),
+):
+    """Refresh every knowledge source, re-run what they feed, publish, and print what changed."""
+    from .knowledge import refresh
+    from .knowledge.registry import SOURCES
+
+    cfg = _cfg()
+    only = [s.id for s in SOURCES if pgs or s.id not in SLOW_SOURCES]
+    if not pgs:
+        console.print(f"[dim]Leaving {', '.join(SLOW_SOURCES)} as they are (add --pgs to refresh them).[/]")
+    res = refresh(cfg, _knowledge_scratch(), only=only)
+    failed = {k: v for k, v in res.items() if v.startswith("failed")}
+    if failed:  # the rest still updated; a release built on them is still consistent and records the versions used
+        console.print(f"[yellow]Not refreshed: {', '.join(failed)}. The run uses their current versions.[/]")
+    before = _latest_release(cfg)
+    _run(cfg, None, None, threads)
+    after = _latest_release(cfg)
+    if after and after.get("id") != (before or {}).get("id"):
+        console.print(f"[green]New release {after['id']}:[/] {after.get('summary', '')}")
+    else:
+        console.print("Nothing changed, so no new release.")
+    if failed:
+        raise typer.Exit(1)
+
+
+def _latest_release(cfg: Config) -> dict | None:
+    idx = cfg.releases_dir / "index.json"
+    if not idx.exists():
+        return None
+    data = json.loads(idx.read_text())
+    return next((r for r in data.get("releases", []) if r["id"] == data.get("latest")), None)
+
+
 @app.command("audit")
 def audit_cmd(
     release: str = typer.Option(None, "--release", "-r", help="Release ID (default: newest)."),
@@ -385,38 +428,24 @@ def query_cmd(
     import json
     import sys
 
-    import duckdb
+    from .readonly import open_release, select
 
     if sql == "-":
         sql = sys.stdin.read()
-    rd = _cfg().releases_dir
-    index = json.loads((rd / "index.json").read_text())
-    rel = next((r for r in index["releases"] if r["id"] == release), None) if release else index["releases"][0]
-    if rel is None:
-        raise typer.BadParameter(f"no release {release}")
-    m = json.loads((rd / rel["manifest"]).read_text())
-    con = duckdb.connect()
-    for name, t in m["tables"].items():
-        con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{(rd / t['path']).as_posix()}')")
-    docs = {name: rd / (d["path"] if isinstance(d, dict) else d) for name, d in m.get("documents", {}).items()}
-    docs = {name: path for name, path in docs.items() if path.suffix == ".json"}
-    for name, path in docs.items():
-        con.execute(f"CREATE VIEW doc_{name} AS SELECT * FROM read_json_auto('{path.as_posix()}')")
-    # Read-only sandbox: only this release folder is readable, nothing can be written.
-    con.execute(f"SET allowed_directories = ['{rd.as_posix()}/']")
-    con.execute("SET enable_external_access = false")
-    con.execute("SET lock_configuration = true")
+    try:
+        r = open_release(_cfg().releases_dir, release)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from None
     if not sql:
-        console.print(f"Release [bold]{rel['id']}[/] · sample {m['sample']}")
-        for name, t in m["tables"].items():
+        console.print(f"Release [bold]{r.id}[/] · sample {r.manifest['sample']}")
+        for name, t in r.manifest["tables"].items():
             console.print(f"  [cyan]{name}[/] ({t['rows']:,} rows) — {t.get('description', '')}")
-        console.print("  Documents (JSON) as views: " + ", ".join(f"doc_{d}" for d in docs))
+        console.print("  Documents (JSON) as views: " + ", ".join(f"doc_{d}" for d in r.docs))
         return
-    stmts = con.extract_statements(sql)
-    if len(stmts) != 1 or stmts[0].type != duckdb.StatementType.SELECT:
-        raise typer.BadParameter("only a single SELECT (or WITH … SELECT) query is allowed")
-    rel_ = con.sql(sql)
-    cols, rows = rel_.columns, rel_.fetchmany(limit)
+    try:
+        cols, rows = select(r.con, sql, limit)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from None
     if fmt == "json":
         print(json.dumps([dict(zip(cols, r, strict=True)) for r in rows], default=str, indent=1))
     elif fmt == "csv":

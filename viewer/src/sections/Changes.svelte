@@ -31,6 +31,23 @@
   const masked = (r: any) => r.sensitive && !revealed;
   let showReworded = $state(false);
 
+  // Why a change happened (diff.why): the knowledge sources it rests on that moved, or the grading rules; neither
+  // means the analysis itself changed.
+  function because(r: any, ch: any, k: any): string {
+    if (!r.why) return '';
+    if (!r.why.length) return 'the analysis itself changed (code or settings), not the knowledge it uses';
+    return r.why.map((w: string) => w === 'evidence_model'
+      ? `grading rules v${ch.evidence_model?.[0] ?? '—'} → v${ch.evidence_model?.[1]}`
+      : `${k?.sources?.[w]?.title ?? w} ${ch.knowledge?.[w]?.[0] ?? 'new'} → ${ch.knowledge?.[w]?.[1] ?? 'removed'}`).join('; ');
+  }
+  const RES_FIELD: Record<string, string> = {
+    diplotype: 'Type (diplotype)', phenotype: 'Effect', activity_score: 'Activity score', percentile: 'Percentile',
+    agreement: 'Studies agree?', overall: 'Overall grade', share: 'Share of your DNA', detected: 'Detected',
+    haplogroup: 'Haplogroup', status: 'Result',
+  };
+  const resFmt = (f: string, v: any) => v == null ? '—' : f === 'percentile' ? `${Math.round(v)}th`
+    : f === 'share' ? `${(v * 100).toFixed(1)}%` : f === 'detected' ? (v ? 'yes' : 'no') : String(v).replaceAll('_', ' ');
+
   // Word-level diff (LCS) so a wording update highlights only the words that changed.
   function wordDiff(a: string, b: string): { t: string; k: 'same' | 'del' | 'add' }[] {
     const x = (a ?? '').split(/(\s+)/), y = (b ?? '').split(/(\s+)/);
@@ -54,7 +71,7 @@
 <div class="grid">
   <Card title="What changed" subtitle="Genomic knowledge keeps moving. Each release records exactly how your results differ from the release before it — and why.">
     <Explain learn="Keeping results current">
-      <p>Your DNA does not change, but what science knows about it does. When you run <code>wgs knowledge refresh</code>, the tool downloads the newest ClinVar, gene and population data, then re-grades every finding. A new release is created only if something actually changed, and this page shows the difference: which knowledge sources moved to a new version, which findings appeared or disappeared, and which of your variants were <strong>reclassified</strong> (for example from “uncertain” to “benign”).</p>
+      <p>Your DNA does not change, but what science knows about it does. When you run <code>wgs refresh</code>, the tool downloads the newest ClinVar, gene and population data, then re-grades every finding. A new release is created only if something actually changed, and this page shows the difference: which knowledge sources moved to a new version, which findings appeared or disappeared, and which of your variants were <strong>reclassified</strong> (for example from “uncertain” to “benign”). Each change says <em>why</em>: the source update it rests on, a change in the grading rules, or a change in the analysis itself.</p>
     </Explain>
     <div class="timeline">
       {#each releases as r (r.id)}
@@ -113,21 +130,21 @@
                     {#if masked(r)}<td colspan="4" class="faint">🔒 sensitive finding</td>{:else}
                     <td><strong>{r.gene ?? r.subject}</strong> <span class="mono faint">{where(r)}</span><div class="faint">{r.category_label}</div></td>
                     <td>{SECTION[r.section] ?? r.section}</td>
-                    <td>{#each Object.entries(r.fields as Record<string, [any, any]>) as [f, [a, b]]}{#if f === 'statement'}<div class="muted wd">{#each wordDiff(a, b) as seg}{#if seg.k === 'del'}<del>{seg.t}</del>{:else if seg.k === 'add'}<ins>{seg.t}</ins>{:else}{seg.t}{/if}{/each}</div>{:else}<div>{FIELD[f] ?? f}: <span class="old">{fmt(f, a)}</span> → <strong>{fmt(f, b)}</strong></div>{/if}{/each}</td>
+                    <td>{#each Object.entries(r.fields as Record<string, [any, any]>) as [f, [a, b]]}{#if f === 'statement'}<div class="muted wd">{#each wordDiff(a, b) as seg}{#if seg.k === 'del'}<del>{seg.t}</del>{:else if seg.k === 'add'}<ins>{seg.t}</ins>{:else}{seg.t}{/if}{/each}</div>{:else}<div>{FIELD[f] ?? f}: <span class="old">{fmt(f, a)}</span> → <strong>{fmt(f, b)}</strong></div>{/if}{/each}{#if r.why}<div class="why">Because: {because(r, ch, data.k)}</div>{/if}</td>
                     <td><span class="pill {OVERALL_PILL[r.overall]}">{r.overall}</span></td>{/if}</tr>
                 {/each}
                 {#each ch.claims.added as r}
                   <tr><td><span class="pill pass">new</span></td>
                     {#if masked(r)}<td colspan="4" class="faint">🔒 sensitive finding</td>{:else}
                     <td><strong>{r.gene ?? r.subject}</strong> <span class="mono faint">{r.rsid ?? ''}</span><div class="faint">{r.category_label}</div></td>
-                    <td>{SECTION[r.section] ?? r.section}</td><td class="muted">{r.statement}</td>
+                    <td>{SECTION[r.section] ?? r.section}</td><td class="muted">{r.statement}{#if r.why}<div class="why">Because: {because(r, ch, data.k)}</div>{/if}</td>
                     <td><span class="pill {OVERALL_PILL[r.overall]}">{r.overall}</span></td>{/if}</tr>
                 {/each}
                 {#each ch.claims.removed as r}
                   <tr><td><span class="pill fail">gone</span></td>
                     {#if masked(r)}<td colspan="4" class="faint">🔒 sensitive finding</td>{:else}
                     <td><strong>{r.gene ?? r.subject}</strong> <span class="mono faint">{r.rsid ?? ''}</span><div class="faint">{r.category_label}</div></td>
-                    <td>{SECTION[r.section] ?? r.section}</td><td class="muted">No longer reported (e.g. reclassified as benign or withdrawn).</td><td></td>{/if}</tr>
+                    <td>{SECTION[r.section] ?? r.section}</td><td class="muted">No longer reported (e.g. reclassified as benign or withdrawn).{#if r.why}<div class="why">Because: {because(r, ch, data.k)}</div>{/if}</td><td></td>{/if}</tr>
                 {/each}
                 {#if reworded.length}
                   <tr><td colspan="5"><button onclick={() => (showReworded = !showReworded)}>{showReworded ? 'Hide' : 'Show'} {int(cc.changed - (cc.regraded ?? 0))} wording-only updates</button>
@@ -147,6 +164,25 @@
             </table>
             {#if (cc.added ?? 0) + (cc.removed ?? 0) + (cc.changed ?? 0) > ch.claims.added.length + ch.claims.removed.length + ch.claims.changed.length}
               <p class="small faint">Showing the first 500 of each kind.</p>{/if}
+          </Card>
+        {/if}
+
+        {#if ch.results?.count}
+          <Card title="Other results" subtitle="Results that aren’t graded findings but can still move: medicine-gene types, polygenic percentiles, ancestry, haplogroups, hard-to-read genes and repeats. Small number wobbles (under 1 percentile point) aren’t counted.">
+            <div class="tablewrap">
+              <table class="small">
+                <thead><tr><th></th><th>Result</th><th>What changed</th></tr></thead>
+                <tbody>
+                  {#each ch.results.items as r}
+                    <tr><td><span class="pill {r.kind === 'added' ? 'pass' : r.kind === 'removed' ? 'fail' : 'partial'}">{r.kind === 'added' ? 'new' : r.kind === 'removed' ? 'gone' : 'changed'}</span></td>
+                      {#if masked(r)}<td colspan="2" class="faint">🔒 sensitive result</td>{:else}
+                      <td><strong>{r.name ?? r.key}</strong><div class="faint">{r.label}</div></td>
+                      <td>{#if r.kind === 'changed'}{#each Object.entries(r.fields as Record<string, [any, any]>) as [f, [a, b]]}<div>{RES_FIELD[f] ?? f}: <span class="old">{resFmt(f, a)}</span> → <strong>{resFmt(f, b)}</strong></div>{/each}{:else}<span class="muted">{r.kind === 'added' ? 'Newly reported.' : 'No longer reported.'}</span>{/if}
+                        <div class="why">Because: {because(r, ch, data.k)}</div></td>{/if}</tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
           </Card>
         {/if}
 
@@ -191,6 +227,7 @@
   del { color: var(--bad); text-decoration: line-through; background: color-mix(in srgb, var(--bad) 12%, transparent); }
   ins { color: var(--good); text-decoration: none; background: color-mix(in srgb, var(--good) 14%, transparent); }
   .wd { margin-top: 4px; }
+  .why { margin-top: 4px; font-size: 0.92em; color: var(--muted); }
   .sens { background: color-mix(in srgb, var(--warn) 9%, transparent); padding: 6px 10px; border-radius: 8px; }
   .tablewrap { max-height: 420px; overflow: auto; }
   .click { cursor: pointer; } .click:hover { background: var(--panel-2); }

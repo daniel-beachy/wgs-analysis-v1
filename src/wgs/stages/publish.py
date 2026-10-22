@@ -27,7 +27,7 @@ from pathlib import Path
 
 import duckdb
 
-from .. import __version__
+from .. import __version__, highlights, take
 from .. import evidence as ev
 from ..checks import run as run_checks
 from ..diff import diff, summarise
@@ -374,7 +374,29 @@ def _input_paths(ctx: Context) -> list[Path]:
         except Exception:
             continue
         paths += [p for p in ins if p.exists()]
-    return sorted(set(paths) | set(_documents(ctx).values()))
+    extra = [p for p in [take.path(ctx.cfg.workspace)] if p.exists()]
+    return sorted(set(paths) | set(_documents(ctx).values()) | set(extra))
+
+
+def _highlights(rd: Path, tables: dict) -> None:
+    """Highlights are picked from the release's own tables, so they can never disagree with them (ADR-025)."""
+    sql = highlights.sql({k: rd / tables[k]["path"] for k in highlights.INPUTS if k in tables})
+    if not sql:
+        return
+    key = _key("highlights", sql)  # the SQL names its content-addressed inputs, so any rule or input change shows
+    obj = _put_object(rd, "highlights", key, "parquet", lambda dest: _copy_sql(sql, dest))
+    con = duckdb.connect()
+    obj["rows"] = con.execute(f"SELECT count(*) FROM '{rd / obj['path']}'").fetchone()[0]
+    con.close()
+    tables["highlights"] = {**obj, "description": "Highlights: the notable results from every section, ranked "
+                            "Strong to Limited, each pointing at the row it came from"}
+
+
+def _tables_of(rd: Path, rid: str | None) -> dict[str, Path] | None:
+    m = rd / str(rid) / "manifest.json"
+    if not rid or not m.exists():
+        return None
+    return {k: rd / v["path"] for k, v in json.loads(m.read_text())["tables"].items()}
 
 
 def build(ctx: Context) -> dict:
@@ -390,8 +412,16 @@ def build(ctx: Context) -> dict:
         obj["rows"] = con.execute(f"SELECT count(*) FROM '{rd / obj['path']}'").fetchone()[0]
         con.close()
         tables[name] = {**obj, "description": desc}
+    _highlights(rd, tables)
 
     documents = {}
+    opinion = take.build(take.path(ctx.cfg.workspace), {k: rd / v["path"] for k, v in tables.items()},
+                         lambda rid: _tables_of(rd, rid))
+    if opinion:
+        for problem in opinion["problems"]:
+            console.print(f"[yellow]  Claude's take: {problem}[/]")
+        text = take.to_json(opinion)
+        documents["take"] = _put_object(rd, "take", _key("take", text), "json", lambda dest: dest.write_text(text))
     for name, src in _documents(ctx).items():
         key = _key(name, hashlib.sha256(src.read_bytes()).hexdigest())
         documents[name] = _put_object(rd, name, key, src.suffix.lstrip("."),
@@ -456,7 +486,7 @@ def _available(ctx: Context) -> str | None:
 
 STAGE = Stage(
     name="publish",
-    version="6",
+    version="7",
     title="Publish a dashboard release",
     fn=build,
     inputs=_input_paths,
