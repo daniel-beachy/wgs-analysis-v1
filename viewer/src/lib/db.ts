@@ -7,7 +7,7 @@ import { tableUrls } from './data';
 
 let dbp: Promise<duckdb.AsyncDuckDB> | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
-let registered = '';
+let release: { m: Manifest; views: Map<string, Promise<unknown>> } | null = null;
 
 async function init(): Promise<duckdb.AsyncDuckDB> {
   const worker = new Worker(eh_worker, { type: 'classic' });
@@ -21,6 +21,8 @@ async function init(): Promise<duckdb.AsyncDuckDB> {
   // Load the Parquet extension from the bundled copy (public/duckdb-ext) so the dashboard works offline.
   const c = await db.connect();
   await c.query(`SET custom_extension_repository = '${new URL('./duckdb-ext', document.baseURI).href}'`);
+  // Release files never change (content-addressed), so each Parquet footer is read once, not once per query.
+  await c.query('SET GLOBAL parquet_metadata_cache = true');
   await c.close();
   return db;
 }
@@ -30,16 +32,26 @@ export async function db(): Promise<duckdb.AsyncDuckDB> {
   return dbp;
 }
 
-/** Create one SQL view per table in the release (variants, coverage_bins, ...). */
+/** Query this release's tables (variants, coverage_bins, ...) by name. */
 export async function useRelease(m: Manifest): Promise<void> {
-  if (registered === m.id) return;
-  const d = await db();
-  conn ??= await d.connect();
+  if (release?.m.id !== m.id) release = { m, views: new Map() };
+}
+
+// A table's view is created the first time a query names it: creating one reads its Parquet footer, a few round
+// trips per file over the web, so making all of them up front held up the first page by seconds (ADR-028).
+async function viewsFor(c: duckdb.AsyncDuckDBConnection, sql: string): Promise<void> {
+  if (!release) return;
+  const { m, views } = release;
+  const catalog = /information_schema|duckdb_\w+\s*\(|\bshow\s+(all\s+)?tables\b/i.test(sql);
   for (const name of Object.keys(m.tables)) {
-    const files = tableUrls(m, name).map((u) => `'${u}'`).join(', ');
-    await conn.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet([${files}])`);
+    if (!catalog && !new RegExp(`\\b${name}\\b`, 'i').test(sql)) continue;
+    if (!views.has(name)) {
+      const files = tableUrls(m, name).map((u) => `'${u}'`).join(', ');
+      views.set(name, c.query(`CREATE OR REPLACE VIEW ${name} AS SELECT * FROM read_parquet([${files}])`)
+        .catch((e) => { views.delete(name); throw e; }));
+    }
+    await views.get(name);
   }
-  registered = m.id;
 }
 
 export type Row = Record<string, any>;
@@ -54,6 +66,7 @@ export async function query(sql: string): Promise<{ rows: Row[]; columns: string
   const d = await db();
   conn ??= await d.connect();
   const t0 = performance.now();
+  await viewsFor(conn, sql);
   const res = await conn.query(sql);
   const columns = res.schema.fields.map((f) => f.name);
   const rows = res.toArray().map((r: any) => {
