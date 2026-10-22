@@ -407,7 +407,8 @@ def _latest_release(cfg: Config) -> dict | None:
 @app.command("audit")
 def audit_cmd(
     release: str = typer.Option(None, "--release", "-r", help="Release ID (default: newest)."),
-    only: list[str] = typer.Option(None, "--only", help="clinvar | gwas | pgs | pubmed | links (repeatable)."),
+    only: list[str] = typer.Option(None, "--only",
+                                   help="clinvar | gwas | pgs | pubmed | links | curated (repeatable)."),
     link_sample: int = typer.Option(40, help="Per-record links to spot-check (all other links are checked)."),
 ):
     """Re-verify a release against the live sources it cites; writes a dated report shown in the QC section."""

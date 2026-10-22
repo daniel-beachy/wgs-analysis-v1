@@ -247,7 +247,9 @@ def check_pgs(con, m: dict) -> list[dict]:
 
 
 def _norm_title(t: str | None) -> str:
-    return re.sub(r"[^a-z0-9]", "", (t or "").lower())
+    """Letters and digits only. Stored titles can carry HTML markup (italic gene names) that PubMed's summary
+    leaves out, so tags are dropped first."""
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"<[^>]+>", "", html.unescape(t or "")).lower())
 
 
 def check_pubmed(con, m: dict) -> list[dict]:
@@ -333,11 +335,16 @@ def quote_numbers(quote: str) -> list[str]:
     return [n.replace(",", "") for n in re.findall(r"\d[\d,]*(?:\.\d+)?", quote or "")]
 
 
+def _plain_numbers(s: str) -> str:
+    """One way of writing numbers: a middle-dot decimal point (Lancet style: 99·8) becomes '.', and thin or
+    non-breaking spaces become ordinary ones."""
+    return html.unescape(s or "").replace("\u00b7", ".").replace("\u2009", " ").replace("\u00a0", " ")
+
+
 def numbers_present(quote: str, text: str) -> list[str]:
     """Numbers from the quote that do NOT appear in the source text (empty = verified)."""
-    text = html.unescape(text).replace("\u00b7", ".").replace("\u2009", " ").replace("\u00a0", " ")
-    have = set(quote_numbers(re.sub(r"(?<=\d) (?=\d{3}\b)", "", text)))
-    return [n for n in quote_numbers(quote) if n not in have]
+    have = set(quote_numbers(re.sub(r"(?<=\d) (?=\d{3}\b)", "", _plain_numbers(text))))
+    return [n for n in quote_numbers(_plain_numbers(quote)) if n not in have]
 
 
 def curated_items() -> list[dict]:

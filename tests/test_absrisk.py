@@ -76,6 +76,17 @@ def test_curated_quote_numbers_must_appear_at_source():
     quote = "risk was 12.5% (95% CI 11.0-14.1) in 1,234 men"
     assert numbers_present(quote, "12.5 % (95 % CI 11.0 to 14.1) among 1 234") == []
     assert numbers_present("lifetime risk 1 in 8", "lifetime risk 1 in 9") == ["8"]
+    # A quote copied from a journal that writes decimals with a middle dot (99·8%) matches either spelling.
+    assert numbers_present("99\u00b78% concordant for 90 genomes", "99.8% concordant for 90 genomes") == []
+    assert numbers_present("99\u00b78% concordant", "99\u00b78% concordant") == []
+    assert numbers_present("99\u00b78% concordant", "98.8% concordant") == ["99.8"]
+
+
+def test_pubmed_titles_compare_without_markup():
+    from wgs.audit import _norm_title
+    assert _norm_title("Risk in <i>GENEB</i> carriers.") == _norm_title("Risk in GENEB carriers")
+    assert _norm_title("Risk in &lt;b&gt; carriers") == _norm_title("Risk in carriers")
+    assert _norm_title("Risk in GENEB carriers") != _norm_title("Risk in GENEC carriers")
 
 
 def test_vendored_table_rows_state_their_numbers():
