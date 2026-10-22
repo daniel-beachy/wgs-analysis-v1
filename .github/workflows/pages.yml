@@ -29,6 +29,8 @@ jobs:
           cache-dependency-path: viewer/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: viewer
+      - run: npm run check
+        working-directory: viewer
       - run: npm run build
         working-directory: viewer
       - name: Add the newest demo data
@@ -38,7 +40,13 @@ jobs:
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
             --jq '[.[] | select(.tagName | startswith("demo-data-"))] | sort_by(.createdAt) | last | .tagName // empty')
           test -n "$tag" || { echo "No demo-data-* release: run pixi run demo-site locally first."; exit 1; }
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern demo-site.tar.gz --dir "$RUNNER_TEMP"
+          # `pixi run demo-site` replaces the asset in place (--clobber), so it can be missing for a minute.
+          for i in 1 2 3 4 5 6; do
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern demo-site.tar.gz --dir "$RUNNER_TEMP" --clobber \
+              && break
+            test "$i" -lt 6 || exit 1
+            sleep 30
+          done
           tar -xzf "$RUNNER_TEMP/demo-site.tar.gz" -C viewer/dist
           test -f viewer/dist/data/index.json
           echo "Demo data: $tag" >> "$GITHUB_STEP_SUMMARY"
