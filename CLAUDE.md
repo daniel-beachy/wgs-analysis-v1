@@ -25,7 +25,9 @@ and learn from for a decade:
 ## How to work here
 
 - **The repo is public.** Never commit personal results or the sample ID; the pre-commit hook and `pixi run guard`
-  block the ID. Personal context lives outside the repo in `../wgs-notes/`.
+  block the ID. Personal context lives outside the repo in `../wgs-notes/`. That includes docs, tests and code
+  comments: never use the owner's own genes, variants or genotypes as examples or as an ADR's "first result"
+  (aggregate counts are fine). The guard can't spot these, so check by eye.
 - Work in sequential steps; each ends with a checkpoint the owner reviews. Commit and push verified work without
   asking. Ask before big scope changes and multi-hour runs; present choices as a short list with a recommendation.
 - **ADR-016 is strict:** no hand-written medical text; every statement comes from a cited source by a rule. Curated
@@ -76,13 +78,13 @@ and learn from for a decade:
 
 ## Open decisions and known gaps
 
-- **Step 9 (accuracy):** no variant caller runs on this Mac (DeepVariant is Linux/x86), so: re-count the reads in the
-  CRAM for every important finding (independent check of the genotype call); run the interpretation pipeline on the
-  HG002 truth VCF as a demo mode and compare with `rtg vcfeval`. Settle exactly what is being benchmarked with the
-  owner.
+- **Demo (HG002):** polygenic scores only run with `--pgs` (hours of 1000 Genomes reference scoring: confirm
+  first).
 - Leiden-type variants where GRCh37's reference carries the disease allele are absent from ClinVar's GRCh37 VCF, and
   the VCF is not a gVCF; a fix needs ClinVar `variant_summary` plus callable/CRAM evidence.
 - Polygenic scores: the selection-rule change (prefer more independent evaluations) and an R²-above-heritability flag
   need a new multi-hour scoring run; scoring every catalog score per trait likewise (ADR-019).
 - Finer-scale ancestry (HGDP + 1000 Genomes) is a later, separate step (ADR-020).
-- Hosting and the portfolio card: revisit at the final step.
+- Hosting and the portfolio card: after step 12, publish the HG002 demo (never the owner's release) as static
+  files. The demo's `annotations` file is 137 MB, over GitHub Pages' 100 MB and Cloudflare Pages' 25 MB per-file
+  limits, so it must be trimmed or split first.

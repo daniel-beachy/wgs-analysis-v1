@@ -606,7 +606,7 @@ def _compound_hets(claims: list[dict], kb: Kb) -> None:
         if len(cs) < 2:
             continue
         if not any(c["category"] in ("pathogenic", "likely_pathogenic") for c in cs):
-            # e.g. GALT's Duarte allele: two 'conflicting' variants that normally travel together on one chromosome
+            # e.g. a common allele made of two 'conflicting' variants that normally travel together on one chromosome
             for c in cs:
                 others = ", ".join(o["aa_change"] or f"{o['chrom']}:{o['pos']}" for o in cs if o is not c)
                 c["statement"] += (f" You also carry another listed variant in {gene} ({others}). Labs disagree "

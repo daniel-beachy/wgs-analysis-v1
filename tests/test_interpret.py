@@ -22,7 +22,7 @@ def test_from_text_and_cues():
     ({"AR"}, "het", "13", "carrier"),
     ({"AR"}, "hom", "13", "affected"),
     ({"AD"}, "het", "1", "possible"),
-    ({"AD", "AR"}, "het", "5", "possible"),         # SDHA-like: dominant and recessive conditions
+    ({"AD", "AR"}, "het", "5", "possible"),         # mixed gene: dominant and recessive conditions
     ({"XLR"}, "hemi", "X", "affected"),
     ({"XLR"}, "het", "X", "carrier"),
     ({"DG"}, "het", "1", "unknown"),

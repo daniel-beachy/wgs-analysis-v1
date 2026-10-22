@@ -113,8 +113,8 @@ class Kb:
                     self.actionability[g] = {"context": ctx, "score": score, "code": overall, "disease": disease,
                                              "outcome": outcome, "intervention": intervention, "url": url,
                                              "genes": genes}
-            # A likelihood rated for several genes together is not a figure for any one of them (e.g. SDHA shares
-            # a paraganglioma rating with SDHB/SDHD, whose penetrance is far higher), so only single-gene ratings
+            # A likelihood rated for several genes together is not a figure for any one of them (e.g. one cancer
+            # rating shared by related genes whose penetrance differs widely), so only single-gene ratings
             # give a penetrance band.
             band = penetrance_band(lik)
             if len(genes) == 1 and band:

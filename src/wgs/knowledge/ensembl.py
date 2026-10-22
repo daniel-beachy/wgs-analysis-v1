@@ -68,8 +68,8 @@ class Mane(Source):
     homepage = "https://www.ncbi.nlm.nih.gov/refseq/MANE/"
     licence = "Public domain (NCBI) / no restrictions (EMBL-EBI)"
     cadence = "a few releases a year"
-    description = ("The one agreed 'standard' transcript per gene that clinical labs use to name protein changes "
-                   "(e.g. GALT p.Asn314Asp), so names here match papers and lab reports.")
+    description = ("The one agreed 'standard' transcript per gene that clinical labs use to name protein changes, "
+                   "so names here match papers and lab reports.")
 
     def probe(self, pin: str | None = None) -> list[Upstream]:
         import re
