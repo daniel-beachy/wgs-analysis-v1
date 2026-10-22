@@ -110,7 +110,10 @@
     (async () => {
       try {
         await useRelease(m);
-        const r = await query(`SELECT * FROM ${from} ${w} ORDER BY chrom_order, pos LIMIT ${PAGE} OFFSET ${pg * PAGE}`);
+        // Stored in position order: without ORDER BY, DuckDB keeps file order and stops after this page instead of
+        // reading every row group (seconds per page over the web, where each read is a round trip).
+        const order = m.tables[from]?.sorted_by?.join() === 'chrom_order,pos' ? '' : ' ORDER BY chrom_order, pos';
+        const r = await query(`SELECT * FROM ${from} ${w}${order} LIMIT ${PAGE} OFFSET ${pg * PAGE}`);
         if (my !== seq) return;
         rows = r.rows;
         ms = r.ms;

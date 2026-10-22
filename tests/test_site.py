@@ -71,6 +71,8 @@ def test_large_tables_are_split_by_chromosome(tmp_path, monkeypatch):
     parts = m["tables"]["annotations"]["parts"]
     assert res["split"] == {"annotations": 4} and len(parts) == 4
     assert m["tables"]["annotations"]["path"] == parts[0]["path"]
+    assert m["tables"]["annotations"]["sorted_by"] == ["chrom_order", "pos"]
+    assert "sorted_by" not in m["tables"]["claims"]
     con = duckdb.connect()
     files = ", ".join(f"'{(out / 'data' / p['path']).as_posix()}'" for p in parts)
     rows = con.execute(f"SELECT chrom_order, pos FROM read_parquet([{files}])").fetchall()

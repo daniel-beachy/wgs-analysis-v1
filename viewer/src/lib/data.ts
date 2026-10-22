@@ -4,6 +4,8 @@ export interface ObjectRef {
   path: string; bytes: number; sha256: string; rows?: number; description?: string;
   /** A table split by chromosome for a static web host (`wgs export-site`, ADR-028): read every part. */
   parts?: ObjectRef[];
+  /** The rows (and parts) are stored in this order, so a query in this order needs no ORDER BY (ADR-028). */
+  sorted_by?: string[];
 }
 export interface ReleaseEntry { id: string; sample: string; created: string; digest: string; manifest: string; previous: string | null; summary?: string; knowledge?: Record<string, string> }
 export interface Index { schema: number; releases: ReleaseEntry[]; latest: string }

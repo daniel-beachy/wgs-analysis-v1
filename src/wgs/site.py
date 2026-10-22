@@ -6,8 +6,8 @@ viewer reads, with these changes for the web:
 
 * `annotations` loses the columns no page reads and the bulk predictor scores whose licences allow only
   non-commercial use (the few graded findings that quote a score keep it, with its source);
-* tables larger than PART_BYTES are rewritten with Parquet V2 encodings and split by chromosome into parts, so no
-  file passes MAX_FILE_BYTES (Cloudflare Pages allows 25 MiB per file, GitHub Pages 100 MB);
+* tables larger than PART_BYTES are rewritten with Parquet V2 encodings, in position order (`sorted_by`), and split by
+  chromosome into parts, so no file passes MAX_FILE_BYTES (Cloudflare Pages allows 25 MiB per file, GitHub 100 MB);
 * `index.json` lists only that release, and its manifest records what changed under `export`;
 * absolute paths on this machine inside JSON documents are cut down to the file name.
 
@@ -53,8 +53,9 @@ def _float_column(name: str) -> bool:
     return name.startswith("af_") or name.endswith("_af")
 
 
-def _rewrite(src: Path, name: str, drop: dict[str, str], objects: Path) -> list[dict]:
-    """Write one table's parts (Parquet V2, sorted by position, split by chromosome); returns their refs."""
+def _rewrite(src: Path, name: str, drop: dict[str, str], objects: Path) -> tuple[list[dict], bool]:
+    """Write one table's parts (Parquet V2, sorted by position, split by chromosome); returns their refs and
+    whether the rows are in position order (the viewer then skips ORDER BY and stops at the first page)."""
     con = duckdb.connect()
     cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{src.as_posix()}')").fetchall()
     names = [c[0] for c in cols]
@@ -99,7 +100,7 @@ def _rewrite(src: Path, name: str, drop: dict[str, str], objects: Path) -> list[
         tmp.replace(dest)
         parts.append({"path": f"objects/{dest.name}", "bytes": dest.stat().st_size, "sha256": sha, "rows": n})
     whole.unlink(missing_ok=True)
-    return parts
+    return parts, positional
 
 
 def _strip_paths(o):
@@ -156,9 +157,11 @@ def export(releases: Path, out: Path, forbidden: list[str] | None = None) -> dic
     for name, ref in manifest["tables"].items():
         src = releases / ref["path"]
         if name in DROP or ref["bytes"] > PART_BYTES:
-            parts = _rewrite(src, name, DROP.get(name, {}), objects)
+            parts, positional = _rewrite(src, name, DROP.get(name, {}), objects)
             new = {**ref, "path": parts[0]["path"], "bytes": sum(p["bytes"] for p in parts),
                    "rows": sum(p["rows"] for p in parts)}
+            if positional:
+                new["sorted_by"] = ["chrom_order", "pos"]
             new["sha256"] = parts[0]["sha256"] if len(parts) == 1 else ""
             if len(parts) > 1:
                 new["parts"] = parts
