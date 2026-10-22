@@ -13,6 +13,8 @@
   import Term from '../components/Term.svelte';
   import AbsRisk from '../components/AbsRisk.svelte';
   import Take from '../components/Take.svelte';
+  import AskAI from '../components/AskAI.svelte';
+  import { highlightItem } from '../lib/askai';
 
   let { m, def }: { m: Manifest; def: SectionDef } = $props();
   let rows = $state<Row[]>([]);
@@ -72,7 +74,7 @@
       <div class="cards">
         {#each shown as r (r.highlight_id)}
           {#if hidden(r)}
-            <button class="hl masked" onclick={() => (revealed = new Set([...revealed, r.highlight_id]))}>
+            <button class="hl masked" id={`hl-${r.highlight_id}`} onclick={() => (revealed = new Set([...revealed, r.highlight_id]))}>
               <span class="pill">{r.kind_label}</span>
               <span>🔒 Sensitive finding — click to reveal</span>
               <span class="pill {OVERALL_PILL[r.overall]}">{r.overall}</span>
@@ -98,6 +100,7 @@
                     {#if s.url}<a href={s.url} target="_blank" rel="noreferrer">{s.source}{s.version ? ` ${s.version}` : ''}</a>{:else}<span>{s.source}</span>{/if}
                   {/each}
                 </span>
+                <AskAI {m} item={() => highlightItem(r)} />
                 {#if page(r.section)}<button class="link" onclick={() => go(r.section)}>Open in {page(r.section)?.title} →</button>{/if}
               </div>
             </article>
@@ -135,7 +138,8 @@
   .sensitive { display: flex; gap: 12px; align-items: center; background: color-mix(in srgb, var(--warn) 9%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
   .hl { display: flex; flex-direction: column; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; text-align: left; }
-  .hl.masked { flex-direction: row; align-items: center; justify-content: space-between; color: var(--muted); font-style: italic; cursor: pointer; }
+  .hl.masked { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-style: italic; cursor: pointer; }
+  .hl.masked .pill { white-space: nowrap; font-style: normal; }
   .head { display: flex; align-items: center; gap: 6px; }
   .kind { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
   h4 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
@@ -143,7 +147,7 @@
   .why { margin: 0; }
   .grades { display: flex; gap: 14px; flex-wrap: wrap; }
   .foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
-  .srcs { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  .srcs { display: flex; gap: 8px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
   .srcs a, .srcs span { overflow-wrap: anywhere; }
   .link { background: none; border: 0; padding: 0; color: var(--accent); }
   .rules { padding-left: 18px; margin: 0 0 8px; }

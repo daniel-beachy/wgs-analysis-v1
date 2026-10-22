@@ -24,8 +24,7 @@
       {@const c = cm[s.ref]}
       <button class="cite" class:missing={!c?.found} class:changed={c?.changed} onclick={() => open(c)}
         title={c?.found ? `${c.title} — ${c.overall ?? 'not graded'}${c.changed ? ' (changed since this was written)' : ''}` : `${s.ref} is not in this release`}>
-        {#if c?.found}{c.title}{#if c.overall} <span class="pill {OVERALL_PILL[c.overall]}">{c.overall}</span>{/if}{:else}⚠ {s.ref}{/if}
-      </button>
+        {#if c?.found}{c.title}{#if c.overall} <span class="pill {OVERALL_PILL[c.overall]}">{c.overall}</span>{/if}{:else}⚠ {s.ref}{/if}</button>
     {:else}{s.v}{/if}
   {/each}
 {/snippet}

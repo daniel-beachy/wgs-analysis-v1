@@ -47,6 +47,7 @@
   // Enzyme "speed" scale for the gauge diagram.
   const SPEED = ['poor', 'intermediate', 'normal', 'rapid', 'ultrarapid'];
   const SPEED_LABEL = ['Poor', 'Intermediate', 'Normal', 'Rapid', 'Ultrarapid'];
+  const SPEED_SHORT = ['Poor', 'Inter.', 'Normal', 'Rapid', 'Ultra']; // phone width: the full words overlap
   const speedIndex = (g: Row) => {
     const p = (g.phenotype ?? '').toLowerCase();
     if (p.includes('ultrarapid')) return 4;
@@ -149,7 +150,7 @@
   {:else}
     <Card title="Your enzyme speeds" subtitle="Each row is a gene; the dot shows how fast your version of the enzyme works compared with the typical version">
       <div class="gauge">
-        <div class="ghead"><span></span>{#each SPEED_LABEL as l, i}<span style:color={speedColor(i)}>{l}</span>{/each}</div>
+        <div class="ghead"><span></span>{#each SPEED_LABEL as l, i}<span style:color={speedColor(i)} title={l}><span class="long">{l}</span><span class="short">{SPEED_SHORT[i]}</span></span>{/each}</div>
         {#each gauged as g}
           {@const i = speedIndex(g)}
           <button class="grow" class:sel={openGene === g.gene} onclick={() => { openGene = openGene === g.gene ? null : g.gene; document.getElementById(`gene-${g.gene}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
@@ -361,7 +362,7 @@
   .cell.normal { background: color-mix(in srgb, var(--good) 7%, transparent); }
   .dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 10%, transparent); flex: none; }
   .dip { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-  .genes { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; align-items: start; }
+  .genes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 8px; align-items: start; }
   .gene { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
   .gene.open { grid-column: 1 / -1; }
   .gene.untyped { opacity: 0.7; }
@@ -376,10 +377,10 @@
   .search input { flex: 1; min-width: 240px; }
   h4 { margin: 14px 0 4px; }
   h4.mt { margin-top: 18px; }
-  .drugs { display: grid; gap: 4px; }
+  .drugs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .drug { border: 1px solid var(--border); border-radius: 8px; }
   .drug.open { background: var(--panel-2); }
-  .dhd { display: flex; gap: 10px; align-items: center; width: 100%; background: none; border: 0; padding: 7px 10px; color: var(--text); cursor: pointer; text-align: left; }
+  .dhd { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; width: 100%; background: none; border: 0; padding: 7px 10px; color: var(--text); cursor: pointer; text-align: left; }
   .dname { font-weight: 600; text-transform: capitalize; min-width: 150px; }
   .dbody { padding: 0 12px 10px; }
   .src { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 6px; }
@@ -388,5 +389,6 @@
   .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; }
   .link.big { font: inherit; font-weight: 700; color: var(--text); }
   .link.inline { font-size: inherit; }
-  @media (max-width: 700px) { .ghead, .grow { grid-template-columns: 70px repeat(5, minmax(0, 1fr)); } .dip { display: none; } }
+  .ghead .short { display: none; }
+  @media (max-width: 700px) { .ghead, .grow { grid-template-columns: 70px repeat(5, minmax(0, 1fr)); } .dip { display: none; } .ghead .long { display: none; } .ghead .short { display: inline; } }
 </style>

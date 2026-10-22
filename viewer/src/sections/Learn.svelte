@@ -52,7 +52,7 @@
 
 <style>
   .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .toc { position: static !important; max-height: none !important; } }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .toc { position: static !important; max-height: none !important; } }
   .toc { position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 96px); overflow: auto; display: flex; flex-direction: column; gap: 2px; font-size: 0.86rem; }
   .toc a { color: var(--muted); padding: 3px 8px; border-radius: 6px; }
   .toc a:hover { background: var(--panel); color: var(--text); text-decoration: none; }

@@ -44,6 +44,7 @@ pixi run wgs doctor          # show what was found and which dashboard sections 
 | `wgs refresh [--pgs]` | Updates the knowledge, re-runs what it affects and publishes a release with a "What changed" report; polygenic-score sources only with `--pgs` (hours) |
 | `wgs audit [--only curated]` | Re-checks the newest release against live ClinVar, GWAS Catalog, PGS Catalog, PubMed, source links and every cited baseline quote (needs internet; summary shown on the Data quality tab) |
 | `wgs query "<SQL>"` | Read-only SQL against the newest release (`claims`, `annotations`, `variants`, …); `-` reads SQL from stdin |
+| `wgs mcp` | The same read-only access for an AI assistant that speaks MCP (Claude Code, Claude Desktop, …); the assistant starts it, see below |
 
 More commands are added as each development step lands (see `docs/PLAN.md`).
 
@@ -55,6 +56,28 @@ we are about each."* [`AGENTS.md`](AGENTS.md) tells it where the data lives, how
 to query it with `wgs query`, what every column means, and how to talk about
 results responsibly (grades and reasons, not a diagnosis, ask before sensitive
 topics, never upload raw files).
+
+Assistants that speak the Model Context Protocol can read the results without a
+shell through `wgs mcp`, a read-only server over the newest release with five
+tools: `guide` (AGENTS.md), `overview`, `highlights`, `result` (one row by table
+and key) and `query` (one SELECT, at most 1,000 rows). It uses the same sandbox
+as `wgs query`: it can read only the releases folder, never the FASTQ, CRAM or
+VCF, and can't write anything ([ADR-027](docs/DECISIONS.md)). Claude Code
+offers it automatically in this repo (`.mcp.json`; approve it once). Elsewhere:
+
+```bash
+claude mcp add wgs -- pixi run --manifest-path /path/to/wgs-analysis-v1/pixi.toml -q wgs mcp
+```
+
+For Claude Desktop, add the same command under `mcpServers` in its
+`claude_desktop_config.json`. Whatever the assistant reads goes to wherever its
+model runs, so with a cloud model, ask narrow questions rather than for whole
+tables.
+
+In the dashboard, every highlight and every finding's details have an **✨ Ask
+AI** button. It copies that one result, its grades with their reasons, its
+sources and the rules above as a prompt you can paste into any assistant.
+Nothing is sent until you paste it.
 
 ## Running the pipeline
 

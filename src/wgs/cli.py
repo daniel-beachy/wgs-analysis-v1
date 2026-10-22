@@ -461,3 +461,11 @@ def query_cmd(
         for r in rows:
             t.add_row(*("" if v is None else str(v) for v in r))
         console.print(t)
+
+
+@app.command("mcp")
+def mcp_cmd():
+    """Serve the newest release read-only to an AI assistant over MCP (stdio; started by the assistant, ADR-027)."""
+    from .mcp_server import serve
+
+    serve(_cfg().releases_dir)

@@ -25,9 +25,12 @@ code { background: var(--code); padding: 0.1em 0.35em; border-radius: 4px; }
 .faint { color: var(--faint); }
 .small { font-size: 0.85rem; }
 .grid { display: grid; gap: 16px; }
-.cols-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.cols-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+/* min(100%, …) so a column never forces a phone-width page wider than the screen */
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.cols-3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.cols-4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+/* On a phone, a wide table scrolls sideways inside itself instead of widening the whole page */
+@media (max-width: 700px) { main table { display: block; max-width: 100%; overflow-x: auto; } }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .spacer { flex: 1; }
 button, select, input {

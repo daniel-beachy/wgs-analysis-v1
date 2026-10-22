@@ -47,6 +47,9 @@ SQL
 ```
 
 Options: `-f table|csv|json`, `--limit N` (default 200), `--release <id>`.
+If you reach this project over MCP instead (`wgs mcp`, ADR-027), the same
+read-only access comes as tools: `guide` (this file), `overview`, `highlights`,
+`result` (one row by table and key) and `query` (one SELECT).
 JSON documents are available as views named `doc_<name>` (e.g. `doc_qc`,
 `doc_changes`). If `pixi` is unavailable, read the Parquet files with any
 DuckDB, Polars, or pandas, using the manifest paths.

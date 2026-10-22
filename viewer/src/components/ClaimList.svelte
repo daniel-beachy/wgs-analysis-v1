@@ -7,6 +7,8 @@
   import { go } from '../lib/router.svelte';
   import { OVERALL_PILL, CALL_PILL, RECOUNT, CLASS_PILL, CLASS_LABEL, stars, STAR_WORD, pct, parseSources, consequenceLabel, aaShort, ROLE, INH } from '../lib/evidence';
   import Term from './Term.svelte';
+  import AskAI from './AskAI.svelte';
+  import { claimItem } from '../lib/askai';
 
   let { m, section, intro = '', groups = [], empty = 'No graded findings for this section in this release.', filters = true, limit = 0, onrows }:
     { m: Manifest; section: string; intro?: string; groups?: string[]; empty?: string; filters?: boolean; limit?: number; onrows?: (rows: Row[]) => void } = $props();
@@ -169,6 +171,7 @@
                     {#if s.url}<a href={s.url} target="_blank" rel="noreferrer">{s.source} {s.version ?? ''}</a>{:else}<span>{s.source} {s.version ?? ''}</span>{/if}
                   {/each}
                   <span class="spacer"></span>
+                  <AskAI {m} item={() => claimItem(r)} />
                   {#if r.chrom}<button onclick={() => go('variants', r.rsid ?? `${r.chrom}:${r.pos}`)}>🔎 Open in variant explorer</button>{/if}
                 </div>
               </td></tr>
