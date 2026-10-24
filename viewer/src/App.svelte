@@ -54,7 +54,7 @@
       <label class="small muted">Release <select bind:value={releaseId}>{#each index.releases as r}<option value={r.id}>{r.id}</option>{/each}</select></label>
     {:else if m}<span class="small faint" title="Each pipeline run creates a dated release">release {m.id}</span>{/if}
     <button class="icon" title="Toggle light / dark" onclick={() => (theme = theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-    <a class="small" href={PORTFOLIO} target="_blank" rel="noreferrer" title="Daniel Beachy — portfolio">Portfolio ↗</a>
+    <a class="small" href={PORTFOLIO} target="_blank" rel="noreferrer" title="More projects by Daniel Beachy">More projects ↗</a>
   </div>
   <nav>
     {#each SECTION_DEFS as s}
