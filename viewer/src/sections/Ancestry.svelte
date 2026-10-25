@@ -1,6 +1,7 @@
 <script lang="ts">
   // Ancestry (ADR-020): which present-day reference groups your DNA is most like, measured against the 1000 Genomes
-  // panel with the method's own error rates, plus the maternal (mtDNA) and paternal (Y) lineages.
+  // panel (and, inside your main group, the Human Genome Diversity Project) with the method's own error rates, plus
+  // the maternal (mtDNA) and paternal (Y) lineages.
   import type { Manifest } from '../lib/data';
   import { loadDoc } from '../lib/data';
   import type { SectionDef } from '../lib/sections';
@@ -19,6 +20,7 @@
   let pops = $state<Row[]>([]);
   let haps = $state<Row[]>([]);
   let pts = $state<Row[]>([]);
+  let rpts = $state<Row[]>([]);
   let doc = $state<any>(null);
   let loaded = $state(false);
   let error = $state('');
@@ -34,6 +36,7 @@
         if (t.ancestry_populations) pops = (await query('SELECT * FROM ancestry_populations ORDER BY neighbours DESC, loo_recall DESC')).rows;
         if (t.haplogroups) haps = (await query("SELECT * FROM haplogroups ORDER BY line = 'paternal'")).rows;
         if (t.ancestry_pca) pts = (await query('SELECT * FROM ancestry_pca ORDER BY you')).rows;
+        if (t.ancestry_region_pca) rpts = (await query('SELECT * FROM ancestry_region_pca ORDER BY you')).rows;
       } catch (e) { error = String(e); }
       loaded = true;
     })();
@@ -44,14 +47,18 @@
   const SUPER = ['EUR', 'AFR', 'EAS', 'SAS', 'AMR'];
   const NAME: Record<string, string> = { AFR: 'African', EUR: 'European', EAS: 'East Asian', SAS: 'South Asian', AMR: 'Admixed American' };
   const superColour = (s: string) => SLOT[SUPER.indexOf(s)] ?? 'var(--faint)';
-  const popCodes = $derived(pops.map((p) => p.code).sort());
+  // Seven colours: the nearest group first, then the populations most of your neighbours come from; the rest grey.
+  const popCodes = $derived([...pops].sort((a, b) => Number(b.in_nearest_group) - Number(a.in_nearest_group)
+    || b.neighbours - a.neighbours || a.code.localeCompare(b.code)).slice(0, SLOT.length).map((p) => p.code));
   const popColour = (c: string) => SLOT[popCodes.indexOf(c)] ?? 'var(--faint)';
+  const hgdp = $derived(pops.some((p) => p.panel?.startsWith('HGDP')));
   const pct = (x: number) => (x >= 0.995 ? '100%' : x < 0.005 ? '0%' : `${(x * 100).toFixed(x < 0.1 ? 1 : 0)}%`);
   const detected = $derived(comps.filter((c) => c.detected));
   const main = $derived(doc?.main as string | undefined);
   const near = $derived(doc?.nearest);
   const zoom = $derived<number[]>(doc?.zoom_pcs ?? [3, 4]);
   const popName = (c: string) => pops.find((p) => p.code === c)?.description ?? c;
+  const short = (c: string) => pops.find((p) => p.code === c)?.name ?? c;
   const parse = (s: any) => { try { return typeof s === 'string' ? JSON.parse(s) : s ?? []; } catch { return []; } };
 
   // Scatter geometry
@@ -62,8 +69,11 @@
     return { x: (v: number) => PAD + ((v - x0) / (x1 - x0 || 1)) * (W - 2 * PAD), y: (v: number) => H - PAD - ((v - y0) / (y1 - y0 || 1)) * (H - 2 * PAD) };
   }
   const global = $derived(pts.length ? scale(pts, 'pc1', 'pc2') : null);
-  const inGroup = $derived(pts.filter((p) => p.you || p.superpop === main));
-  const local = $derived(inGroup.length ? scale(inGroup, `pc${zoom[0]}`, `pc${zoom[1]}`) : null);
+  // Right-hand plot: the PCA within your main group (high-depth panels) when there is one, else the global PCA
+  const inGroup = $derived(rpts.length ? rpts : pts.filter((p) => p.you || p.superpop === main));
+  const axes = $derived<number[]>(rpts.length ? [1, 2] : zoom);
+  const local = $derived(inGroup.length ? scale(inGroup, `pc${axes[0]}`, `pc${axes[1]}`) : null);
+  const meLocal = $derived(inGroup.find((p) => p.you));
   const you = $derived(pts.find((p) => p.you));
   const show = (e: MouseEvent, text: string) => { const r = (e.currentTarget as SVGElement).ownerSVGElement!.getBoundingClientRect(); hover = { x: e.clientX - r.left, y: e.clientY - r.top, text }; };
 </script>
@@ -76,10 +86,10 @@
 
   <Explain title="Read this first: what genetic ancestry can and cannot say">
     <ul>
-      <li><strong>It is similarity, not a family tree.</strong> Your DNA is compared with 2,504 present-day people from 26 populations sequenced by the 1000 Genomes Project. “European 100%” means your DNA sits with the European reference people, not that every ancestor lived in Europe.</li>
+      <li><strong>It is similarity, not a family tree.</strong> Your DNA is compared with 2,504 present-day people from 26 populations sequenced by the 1000 Genomes Project{#if hgdp}, and inside your main group also with the Human Genome Diversity Project’s populations (929 people from 54 groups){/if}. “European 100%” means your DNA sits with the European reference people, not that every ancestor lived in Europe.</li>
       <li><strong>Reference groups are broad.</strong> Five continental groups, and inside each a handful of sampled populations. Groups that were never sampled can’t show up, and neighbouring populations often can’t be told apart. The page says when that happens, using the method’s measured error rate.</li>
       <li><strong>Lineages are single lines.</strong> Your mother’s mother’s mother… line (mitochondrial DNA) and, for men, your father’s father’s father… line (Y chromosome). Each is one ancestor out of thousands in any generation, and the haplogroup names describe migrations thousands of years ago, not recent family.</li>
-      <li>Commercial tests report finer regions using private reference panels with tens of thousands of people; this open method does not try to match them.</li>
+      <li>Commercial tests report finer regions using private reference panels with hundreds of thousands of people; this open method uses public panels of a few hundred people per region, so it stops where they stop.</li>
     </ul>
   </Explain>
 
@@ -113,7 +123,7 @@
     {/if}
 
     {#if pts.length && global && you}
-      <Card title="2 · You among the reference people" subtitle="Each dot is one 1000 Genomes person; the ring is you. Left: the two main ancestry axes. Right: the people in your main group, on the two axes that best separate its populations.">
+      <Card title="2 · You among the reference people" subtitle={rpts.length ? 'Each dot is one reference person; the ring is you. Left: the two main ancestry axes (1000 Genomes). Right: the reference people of your main group, from both panels, on the first two axes of a PCA within that group.' : 'Each dot is one 1000 Genomes person; the ring is you. Left: the two main ancestry axes. Right: the people in your main group, on the two axes that best separate its populations.'}>
         <div class="plots">
           <figure>
             <svg viewBox="0 0 {W} {H}" role="img" aria-label="Ancestry PCA, axes 1 and 2">
@@ -129,16 +139,20 @@
           </figure>
           {#if local && main}
             <figure>
-              <svg viewBox="0 0 {W} {H}" role="img" aria-label="Your main group, axes {zoom[0]} and {zoom[1]}">
-                <text x={W / 2} y={H - 6} class="ax">ancestry axis {zoom[0]}</text>
-                <text x="10" y={H / 2} class="ax" transform="rotate(-90 10 {H / 2})">axis {zoom[1]}</text>
-                {#each inGroup.filter((p) => !p.you) as p (p.iid)}
-                  <circle cx={local.x(p[`pc${zoom[0]}`])} cy={local.y(p[`pc${zoom[1]}`])} r="3" fill={popColour(p.population)} opacity="0.75" role="presentation"
+              <svg viewBox="0 0 {W} {H}" role="img" aria-label="Your main group, axes {axes[0]} and {axes[1]}">
+                <text x={W / 2} y={H - 6} class="ax">{rpts.length ? 'within-group' : 'ancestry'} axis {axes[0]}</text>
+                <text x="10" y={H / 2} class="ax" transform="rotate(-90 10 {H / 2})">axis {axes[1]}</text>
+                {#each inGroup.filter((p) => !p.you && !popCodes.includes(p.population)) as p (p.iid)}
+                  <circle cx={local.x(p[`pc${axes[0]}`])} cy={local.y(p[`pc${axes[1]}`])} r="2.6" fill="var(--faint)" opacity="0.45" role="presentation"
                     onmouseenter={(e) => show(e, `${p.iid} · ${popName(p.population)}`)} onmouseleave={() => (hover = null)} />
                 {/each}
-                <circle cx={local.x(you[`pc${zoom[0]}`])} cy={local.y(you[`pc${zoom[1]}`])} r="7" class="you" />
+                {#each inGroup.filter((p) => !p.you && popCodes.includes(p.population)) as p (p.iid)}
+                  <circle cx={local.x(p[`pc${axes[0]}`])} cy={local.y(p[`pc${axes[1]}`])} r="3" fill={popColour(p.population)} opacity="0.8" role="presentation"
+                    onmouseenter={(e) => show(e, `${p.iid} · ${popName(p.population)}`)} onmouseleave={() => (hover = null)} />
+                {/each}
+                {#if meLocal}<circle cx={local.x(meLocal[`pc${axes[0]}`])} cy={local.y(meLocal[`pc${axes[1]}`])} r="7" class="you" />{/if}
               </svg>
-              <figcaption class="legend small">{#each popCodes as c}<span><i style:background={popColour(c)}></i>{c}</span>{/each}<span><i class="ring"></i>You</span></figcaption>
+              <figcaption class="legend small">{#each popCodes as c}<span><i style:background={popColour(c)}></i>{short(c)}</span>{/each}{#if pops.length > popCodes.length}<span><i style:background="var(--faint)"></i>other populations</span>{/if}<span><i class="ring"></i>You</span></figcaption>
             </figure>
           {/if}
           {#if hover}<div class="tip small" style:left="{hover.x + 12}px" style:top="{hover.y + 12}px">{hover.text}</div>{/if}
@@ -156,15 +170,16 @@
             {#each pops as p (p.code)}
               {@const cw = parse(p.confused_with)}
               <tr class:hl={p.in_nearest_group}>
-                <td><i class="dot" style:background={popColour(p.code)}></i>{#if p.url}<a href={p.url} target="_blank" rel="noreferrer">{p.description ?? p.code}</a>{:else}{p.description ?? p.code}{/if} <span class="faint">({p.code}{p.samples ? `, ${p.samples} people` : ''})</span></td>
+                <td><i class="dot" style:background={popColour(p.code)}></i>{#if p.url}<a href={p.url} target="_blank" rel="noreferrer">{p.description ?? p.code}</a>{:else}{p.description ?? p.code}{/if} <span class="faint">({p.panel?.startsWith('HGDP') ? 'HGDP' : p.code}{p.samples ? `, ${p.samples} people` : ''})</span></td>
                 <td data-label="Your 10 nearest"><span class="nb"><span style:width="{p.neighbours * 10}%"></span></span> {p.neighbours}</td>
                 <td data-label="Method accuracy">{Math.round(p.loo_recall * 100)}%</td>
-                <td class="faint" data-label="Often confused with">{Object.entries(cw).filter(([, v]) => (v as number) >= 0.05).map(([k, v]) => `${k} ${Math.round((v as number) * 100)}%`).join(', ') || '—'}</td>
+                <td class="faint" data-label="Often confused with">{Object.entries(cw).filter(([, v]) => (v as number) >= 0.05).map(([k, v]) => `${short(k)} ${Math.round((v as number) * 100)}%`).join(', ') || '—'}</td>
               </tr>
             {/each}
           </tbody>
         </table>
-        <p class="faint small">“Method accuracy” is the share of that population’s reference people placed back in it when each is left out and classified by its 10 nearest neighbours. Population names and sampling details come from the International Genome Sample Resource.</p>
+        <p class="faint small">“Method accuracy” is the share of that population’s reference people placed back in it when each is left out and classified by its 10 nearest neighbours. Small groups score low partly because few of their own people can be among anyone’s 10 nearest. Population names and sampling details come from the International Genome Sample Resource.</p>
+        {#if hgdp}<p class="faint small">Both panels here were sequenced at 30× (1000 Genomes’ 2022 re-sequencing, and HGDP), like your genome; mixing in the original low-depth 1000 Genomes data made the two projects look like different populations. As a check, populations sampled by both (Tuscans, Japanese, Dai, Yoruba, northern Han) must not be told apart{#if near?.twins}: {Object.entries(near.twins).map(([h, t]: [string, any]) => `${short(h)} ↔ ${t.twin} ${t.confused ? 'not told apart ✓' : 'told apart ✗'}`).join(', ')}{/if}. The PCA used {near?.positions?.toLocaleString()} positions and {near?.pcs} axes (the number the leave-one-out test did best with).</p>{/if}
       </Card>
     {/if}
 

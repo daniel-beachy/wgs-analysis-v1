@@ -84,7 +84,8 @@ and learn from for a decade:
   the VCF is not a gVCF; a fix needs ClinVar `variant_summary` plus callable/CRAM evidence.
 - Polygenic scores: the selection-rule change (prefer more independent evaluations) and an R²-above-heritability flag
   need a new multi-hour scoring run; scoring every catalog score per trait likewise (ADR-019).
-- Finer-scale ancestry (HGDP + 1000 Genomes) is a later, separate step (ADR-020).
+- Finer-scale ancestry is done with public panels (ADR-020 addendum); haplotype methods (ChromoPainter-style) would
+  need controlled-access regional panels and are out of scope.
 - The public demo (ADR-028): `pixi run demo` rebuilds the HG002 release, then `pixi run demo-site` exports a trimmed
   copy (truth-set releases only), uploads it as a `demo-data-<id>` release asset and deploys
   https://daniel-beachy.github.io/wgs-analysis-v1/. The portfolio card lives in `~/AI_PROJECTS/portfolio-site`

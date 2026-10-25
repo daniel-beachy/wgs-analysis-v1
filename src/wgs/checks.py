@@ -215,6 +215,11 @@ CHECKS: list[Check] = [
           "The nearest-population vote must account for exactly the 10 neighbours used (ancestry.K_NEIGHBOURS).",
           ("ancestry_populations",),
           "SELECT 'sum ' || sum(neighbours) FROM ancestry_populations HAVING count(*) > 0 AND sum(neighbours) <> 10"),
+    Check("ancestry.panels_comparable", "The finer-ancestry panels agree on populations they both sampled",
+          "HGDP and 1000 Genomes both sampled Tuscans, Japanese, Dai, Yoruba and northern Han. If the method tells "
+          "such a pair apart, the panels differ for technical reasons (low-depth phase 3 genotypes did) and the "
+          "nearest population can't be trusted (ADR-020 addendum).", ("ancestry_populations",),
+          "SELECT code FROM ancestry_populations WHERE twin IS NOT NULL AND NOT twin_confused"),
     Check("haplogroups.sourced", "Every haplogroup names its tool, tree, quality and a link to the tree",
           "A lineage label is only checkable with the tree it was placed on.", ("haplogroups",),
           """SELECT line FROM haplogroups WHERE tool IS NULL OR tree IS NULL OR url IS NULL OR quality IS NULL

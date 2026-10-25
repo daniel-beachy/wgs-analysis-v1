@@ -129,7 +129,8 @@ pixi run wgs audit                            # confirm every cited record and q
 | [SFARI Gene](https://gene.sfari.org/) | Genes linked to autism and neurodevelopment | Free for research use |
 | [STRchive](https://strchive.org) | Repeat-expansion disease loci: typical and disease ranges, evidence, references | MIT |
 | [gnomAD-SV v2.1](https://gnomad.broadinstitute.org/) | How common each deletion/duplication is (GRCh37, ≈10,800 genomes) | CC0 |
-| [IGSR populations](https://www.internationalgenome.org/data-portal/population) | Names and sampling locations of the 26 1000 Genomes populations (Ancestry tab) | Free to use without restriction |
+| [IGSR populations](https://www.internationalgenome.org/data-portal/population) | Names and sampling locations of the 26 1000 Genomes and 54 HGDP populations (Ancestry tab) | Free to use without restriction |
+| [HGDP + 1000 Genomes 30×](https://www.cog-genomics.org/plink/2.0/resources) | High-depth reference genomes at the ~45,000 ancestry positions, for the finer nearest-population comparison (one-time ≈ 6 GB download, ≈ 40 MB kept) | Open (Fort Lauderdale principles) |
 | [Genome in a Bottle](https://www.nist.gov/programs-projects/genome-bottle) HG002 v4.2.1 + stratifications v3.6 | Accuracy benchmark: a reference person's true variants, their DNBSEQ reads for the panel regions (≈ 55 MB after thinning to 30×), and the map of hard-to-sequence regions | Public domain (NIST data) |
 
 Every release also runs **self-checks**: consistency rules over its own tables (every finding has a source and grade, every matched guideline has text, buckets follow the curated flags, and so on). Results are on the Data quality tab and in `checks.json`; a failure is shown loudly rather than blocking the release. The rules live in `src/wgs/checks.py`. See [ADR-016](docs/DECISIONS.md).

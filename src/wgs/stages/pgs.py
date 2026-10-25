@@ -106,7 +106,10 @@ def _plink(ctx: Context, *args: str, log: str) -> None:
 
 
 def _panel(ctx: Context) -> dict:
-    st = Store(ctx.cfg)
+    return panel_files(Store(ctx.cfg))
+
+
+def panel_files(st: Store) -> dict:
     cur = st.current("pgs_reference")
     root = st.root / "pgs_reference" / cur["version"]
     pgen = next(_files(root, "GRCh37_*.pgen"))
@@ -136,16 +139,23 @@ def _reference_qc(ctx: Context, panel: dict) -> Path:
         return d
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True)
-    vzs = "vzs" if panel["pvar"].name.endswith(".zst") else ""
-    pf = ["--pfile", str(panel["stem"])] + ([vzs] if vzs else [])
-    rm = ["--remove", str(panel["king"])] if panel["king"] else []
-    _plink(ctx, *pf, *rm, *REF_QC, "--make-pgen", "--out", str(d / "qc"), log="ref-qc")
-    _plink(ctx, "--pfile", str(d / "qc"), "--indep-pairwise", "1000", "50", "0.05",
-           "--exclude", "range", str(HIGH_LD), "--out", str(d / "thin"), log="ref-thin")
+    pf = reference_thin(panel, d, lambda *a, log: _plink(ctx, *a, log=log))
     # Frequencies over the whole panel (for filling a missing genotype with its expected dosage).
     _plink(ctx, *pf, "--freq", "--out", str(d / "all"), log="ref-freq")
     done.write_text("ok\n")
     return d
+
+
+def reference_thin(panel: dict, d: Path, plink) -> list[str]:
+    """Quality-filter the panel (d/qc) and thin it to roughly independent positions (d/thin.prune.in), the PCA
+    positions. Shared with the finer-ancestry panels (knowledge/ancestry_panels.py) so both use the same positions."""
+    vzs = "vzs" if panel["pvar"].name.endswith(".zst") else ""
+    pf = ["--pfile", str(panel["stem"])] + ([vzs] if vzs else [])
+    rm = ["--remove", str(panel["king"])] if panel["king"] else []
+    plink(*pf, *rm, *REF_QC, "--make-pgen", "--out", str(d / "qc"), log="ref-qc")
+    plink("--pfile", str(d / "qc"), "--indep-pairwise", "1000", "50", "0.05",
+          "--exclude", "range", str(HIGH_LD), "--out", str(d / "thin"), log="ref-thin")
+    return pf
 
 
 # ---------------------------------------------------------------------------------------------------------------

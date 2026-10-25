@@ -282,6 +282,9 @@ TABLES: list[tuple[str, str, Callable[[Context], list[Path]], Callable[[Context]
      "and how well the method tells them apart"),
     ("ancestry_pca", "1", lambda c: [ancestry.out_pca(c)], _file_sql(ancestry.out_pca),
      "Ancestry: you and the 2,504 1000 Genomes reference people on the 10 ancestry principal components"),
+    ("ancestry_region_pca", "1", lambda c: [ancestry.out_region_pca(c)], _file_sql(ancestry.out_region_pca),
+     "Ancestry: you and the high-depth reference people of your main group (1000 Genomes 30× and the Human "
+     "Genome Diversity Project) on the first four axes of a PCA within that group"),
     ("haplogroups", "1", lambda c: [ancestry.out_haplogroups(c)], _file_sql(ancestry.out_haplogroups),
      "Ancestry: your maternal (mtDNA) and paternal (Y) haplogroups, with quality and the lineage tree used"),
     ("recount", "1", lambda c: [recount.out_sites(c)], _file_sql(recount.out_sites),
@@ -335,7 +338,8 @@ def _knowledge(ctx: Context, annotated: bool) -> dict:
         return {"versions": {}, "evidence_model": None, "sources": {}}
     summary = json.loads(annotate.summary_path(ctx).read_text())
     used = dict(summary.get("knowledge", {}))
-    for p in (pgx.out_paths(ctx)["summary"], traits.out_summary(ctx), pgs.out_summary(ctx)):
+    for p in (pgx.out_paths(ctx)["summary"], traits.out_summary(ctx), pgs.out_summary(ctx),
+              ancestry.out_summary(ctx)):
         if p.exists():
             used.update(json.loads(p.read_text()).get("knowledge", {}))
     idx = Store(ctx.cfg).index()["sources"]

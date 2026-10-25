@@ -8,9 +8,13 @@ Every number is calibrated on the reference panel itself, so the page can say ho
    to one), the projection approach used by rye (Conley et al. 2023). Each reference person is scored the same way
    with themselves left out; the share the method wrongly gives a group among reference people who are not from it
    (95th percentile) is that group's noise floor, and smaller shares are reported as "not distinguishable from zero".
-2. **Nearest reference population** within your main group: the 10 nearest reference people on the 10 PCs. Leave-
-   one-out shows which populations the method can tell apart (Finnish vs Tuscan: yes; British vs CEU: no), and
-   populations it confuses are reported together.
+2. **Nearest reference population** within your main group: the 10 nearest reference people. Leave-one-out shows
+   which populations the method can tell apart (Finnish vs Tuscan: yes; British vs CEU: no), and populations it
+   confuses with the nearest one, directly or through a chain of confusions, are reported together. When the
+   high-depth panels are in the knowledge store (``ancestry_panels``), the comparison adds the Human Genome Diversity
+   Project's populations: a PCA of everyone in your main group (1000 Genomes 30× + HGDP + you, so you are not
+   projected) on about 40,000 positions, with the number of axes the leave-one-out test does best with. Otherwise it
+   uses the 1000 Genomes PCA above.
 3. **Maternal line** (mitochondrial DNA): haplogrep3 on your chrM calls (PhyloTree 17 Forensic Update).
 4. **Paternal line** (Y chromosome, XY only): Yleaf on your Y reads (YFull tree), or on the VCF when no alignment is
    available (lower confidence: positions absent from a VCF are assumed to match the reference).
@@ -29,6 +33,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from ..knowledge import Store
+from ..knowledge.ancestry_panels import MISSING, read_bed
 from ..pipeline import Context, Stage, run, write_json
 from . import pgs, qc, reference, variants
 from .pgx import _env_tool
@@ -41,6 +46,11 @@ NOISE_QUANTILE = 0.95
 CONFUSED = 0.20          # two populations are "not told apart" if ≥ 20% of either is classified as the other
 MAIN_SHARE = 0.80        # below this, nearest-population within one group is not meaningful
 MIN_PCA_VARIANTS = 50_000
+REGION_PCS = (4, 6, 8, 10)   # axes tried for the finer comparison; the one with the best leave-one-out accuracy wins
+MIN_REGION_SITES = 20_000    # positions in the finer PCA for a High call
+# The same population sampled by both panels. If a pair is told apart, the panels differ for technical reasons
+# (as phase 3's low-depth genotypes did) and the finer comparison can't be trusted (self-check).
+TWINS = {"TuscanHGDP": "TSI", "JapaneseHGDP": "JPT", "DaiHGDP": "CDX", "YorubaHGDP": "YRI", "NorthernHanHGDP": "CHB"}
 MT_HIGH, MT_MEDIUM = 0.90, 0.80   # haplogrep3 quality, 0–1 (thresholds are this project's, ADR-020)
 Y_HIGH, Y_MEDIUM = 0.95, 0.90     # Yleaf QC-score (its default prediction threshold is 0.95)
 MT_TREE = "phylotree-fu-rcrs@1.2"
@@ -70,6 +80,10 @@ def out_haplogroups(ctx: Context) -> Path:
 
 def out_pca(ctx: Context) -> Path:
     return out_dir(ctx) / "pca.parquet"
+
+
+def out_region_pca(ctx: Context) -> Path:
+    return out_dir(ctx) / "region_pca.parquet"
 
 
 def out_summary(ctx: Context) -> Path:
@@ -156,6 +170,19 @@ def zoom_pcs(ref: dict, superpop: str) -> list[int]:
     return sorted(int(i) + 1 for i in np.argsort(-ratio)[:2])
 
 
+def confusable(conf: dict[str, dict[str, float]], best: str) -> set[str]:
+    """Populations that can't be told apart from `best`, directly or through a chain: if CHB is mixed up with Han
+    and with CHS, a "Han" result can't rule out CHS either."""
+    group, todo = {best}, [best]
+    while todo:
+        a = todo.pop()
+        for b in conf:
+            if b not in group and (conf[a][b] >= CONFUSED or conf[b][a] >= CONFUSED):
+                group.add(b)
+                todo.append(b)
+    return group
+
+
 def nearest(ref: dict, me: np.ndarray, superpop: str) -> tuple[list[dict], dict]:
     """kNN within one super-population, with a leave-one-out confusion matrix."""
     sel = ref["superpop"] == superpop
@@ -168,13 +195,81 @@ def nearest(ref: dict, me: np.ndarray, superpop: str) -> tuple[list[dict], dict]
     conf = {a: {b: float(np.mean(pred[y == a] == b)) for b in pops} for a in pops}
     votes = _knn(xs, y, q, K_NEIGHBOURS)
     best = _vote(votes)
-    group = sorted({best} | {p for p in pops if p != best and (conf[best][p] >= CONFUSED or conf[p][best] >= CONFUSED)},
-                   key=lambda p: (-votes.get(p, 0), p))
+    group = sorted(confusable(conf, best), key=lambda p: (-votes.get(p, 0), p))
     rows = [{"code": p, "neighbours": votes.get(p, 0), "loo_recall": conf[p][p],
              "confused_with": json.dumps({b: round(v, 3) for b, v in conf[p].items() if b != p and v > 0}),
              "nearest": p == best, "in_nearest_group": p in group} for p in pops]
     return rows, {"nearest": best, "group": group, "k": K_NEIGHBOURS, "accuracy": float(np.mean(pred == y)),
                   "confusion": conf}
+
+
+def region_pca(x: np.ndarray, you: np.ndarray, n: int = max(REGION_PCS)) -> tuple[np.ndarray, np.ndarray, int]:
+    """PCA of reference people (rows of x: copies of each position's alt allele, NaN = not called) plus you as one
+    more row, so your point is not shrunk the way a projected sample is. Positions you weren't called at, or
+    missing in more than 5% of people, or rarer than 1%, are left out. Returns (reference PCs, your PCs, positions)."""
+    a = np.vstack([x, you])
+    af = np.nanmean(a, 0) / 2
+    keep = (np.isnan(a).mean(0) < 0.05) & (np.minimum(af, 1 - af) > 0.01) & ~np.isnan(you)
+    a = a[:, keep]
+    mu = np.nanmean(a, 0)
+    a = np.where(np.isnan(a), mu, a)
+    z = (a - mu) / np.sqrt(mu * (1 - mu / 2))  # sd of a 0/1/2 genotype under Hardy-Weinberg: sqrt(2p(1-p))
+    u, sv, _ = np.linalg.svd(z, full_matrices=False)
+    pcs = u[:, :n] * sv[:n]
+    return pcs[:-1], pcs[-1], int(keep.sum())
+
+
+def twins(conf: dict[str, dict[str, float]]) -> dict[str, dict]:
+    """For each population sampled by both panels: was it confused with its counterpart, as it should be?"""
+    return {h: {"twin": t, "confused": conf[h][t] >= CONFUSED or conf[t][h] >= CONFUSED}
+            for h, t in TWINS.items() if h in conf and t in conf}
+
+
+def regional(x: np.ndarray, labels: np.ndarray, you: np.ndarray, superpop: str) -> dict:
+    """The finer nearest-population comparison: PCA within one continental group, then the kNN vote on the number of
+    axes with the best leave-one-out accuracy."""
+    ref_pcs, my_pcs, n_sites = region_pca(x, you)
+    best = None
+    for k in REGION_PCS:
+        ref = {"pcs": ref_pcs[:, :k], "superpop": np.full(len(labels), superpop), "population": labels}
+        rows, near = nearest(ref, my_pcs[:k], superpop)
+        if best is None or near["accuracy"] > best[1]["accuracy"] + 1e-9:
+            best = (rows, near, k)
+    rows, near, k = best
+    return {"rows": rows, "near": {**near, "pcs": k, "positions": n_sites, "twins": twins(near["confusion"])},
+            "ref_pcs": ref_pcs, "my_pcs": my_pcs}
+
+
+def _panels(ctx: Context, superpop: str) -> tuple[np.ndarray, list[dict], np.ndarray] | None:
+    """The high-depth reference people of one continental group (genotypes, sample rows) and your genotypes at the
+    same positions, all as copies of the GRCh37 alt allele."""
+    st = Store(ctx.cfg)
+    gt, sm = st.table("ancestry_panels", "genotypes"), st.table("ancestry_panels", "samples")
+    stem = pgs.pgs_dir(ctx) / "pca" / "self"
+    if not gt or not sm or not stem.with_suffix(".bed").exists():
+        return None
+    bim, _, mine = read_bed(stem)
+    me: dict[str, float] = {}
+    for row, g in zip(bim, mine[:, 0], strict=True):
+        alt = row[1].split(":")[-1]
+        if g != MISSING and alt in (row[4], row[5]):
+            me[row[1]] = float(g if row[4] == alt else 2 - g)
+    people = [r for r in pq.read_table(sm).to_pylist() if r["superpop"] == superpop and not r["related"]]
+    if not people:
+        return None
+    t = pq.read_table(gt, columns=["id", "genotypes"])
+    ids = t.column("id").to_pylist()
+    at = [i for i, sid in enumerate(ids) if sid in me]
+    blobs = t.column("genotypes")
+    g = np.frombuffer(b"".join(blobs[i].as_py() for i in at), dtype=np.uint8).reshape(len(at), -1)
+    x = g[:, [r["col"] for r in people]].T.astype(float)
+    x[x == MISSING] = np.nan
+    return x, people, np.array([me[ids[i]] for i in at])
+
+
+def code(person: dict) -> str:
+    """Population code as IGSR names it: 1000 Genomes codes (GBR), HGDP names plus "HGDP" (YorubaHGDP)."""
+    return person["population"] + ("HGDP" if person["panel"] == "hgdp" else "")
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -360,6 +455,28 @@ def _ancestry(ctx: Context) -> dict:
         summary.update(cal, main=main["superpop"], main_share=main["share"])
         pop_rows, near = nearest(ref, me, main["superpop"])
         summary["zoom_pcs"] = zoom_pcs(ref, main["superpop"])
+        panel_people = None
+        hd = _panels(ctx, main["superpop"])
+        if hd:
+            x, people, mine = hd
+            labels = np.array([code(p) for p in people])
+            reg = regional(x, labels, mine, main["superpop"])
+            pop_rows, near = reg["rows"], reg["near"]
+            panel_people = people
+            counts = {c: int((labels == c).sum()) for c in set(labels.tolist())}
+            panels = {code(p): p["panel_label"] for p in people}
+            for r in pop_rows:
+                r.update({"panel": panels[r["code"]], "panel_samples": counts[r["code"]],
+                          "twin": (near["twins"].get(r["code"]) or {}).get("twin"),
+                          "twin_confused": (near["twins"].get(r["code"]) or {}).get("confused")})
+            rp = [{"iid": "you", "panel": None, "population": None, "you": True,
+                   **{f"pc{i + 1}": float(reg["my_pcs"][i]) for i in range(4)}}]
+            rp += [{"iid": p["iid"], "panel": p["panel_label"], "population": code(p), "you": False,
+                    **{f"pc{i + 1}": float(v) for i, v in enumerate(row[:4])}}
+                   for p, row in zip(people, reg["ref_pcs"], strict=True)]
+            pq.write_table(pa.Table.from_pylist(rp), out_region_pca(ctx))
+        else:
+            out_region_pca(ctx).unlink(missing_ok=True)
         pts = [{"iid": "you", "superpop": None, "population": None, "you": True,
                 **{f"pc{i + 1}": float(me[i]) for i in range(N_PCS)}}]
         pts += [{"iid": iid, "superpop": str(sp), "population": str(pp), "you": False,
@@ -370,25 +487,45 @@ def _ancestry(ctx: Context) -> dict:
         tbl = st.table("igsr_populations", "populations")
         if tbl:
             names = {r["code"]: r for r in duckdb.sql(f"SELECT * FROM '{tbl}'").fetchdf().to_dict("records")}
+        def label(c: str) -> str:
+            n = names.get(c) or {}
+            return f"{n['name']} ({'HGDP' if c.endswith('HGDP') else c})" if n.get("name") else c
+
         rec = near["confusion"][near["nearest"]][near["nearest"]]
         mixed = main["share"] < MAIN_SHARE
-        ev = "Limited" if mixed or len(near["group"]) > 1 or rec < 0.9 else "Moderate"
+        broken = [h for h, t in (near.get("twins") or {}).items() if not t["confused"]]
+        ev = "Limited" if mixed or broken or len(near["group"]) > 1 or rec < 0.9 else "Moderate"
         reasons = ([f"Your main group is only {main['share']:.0%} of your ancestry, so the nearest population inside "
                     "it is not very meaningful"] if mixed else []) + \
-                  ([f"The method cannot tell {', '.join(near['group'])} apart: in a leave-one-out test on the "
+                  ([f"The method cannot tell {', '.join(label(c) for c in near['group'])} apart: in a leave-one-out "
+                    "test on the "
                     "reference panel it mixes them up at least "
                     f"{CONFUSED:.0%} of the time"] if len(near["group"]) > 1 else
-                   [f"In a leave-one-out test, {rec:.0%} of {near['nearest']} reference people were placed in "
-                    "their own population"])
+                   [f"In a leave-one-out test, {rec:.0%} of {label(near['nearest'])} reference people were placed in "
+                    "their own population"]) + \
+                  ([f"The same population sampled by both reference panels ({', '.join(map(label, broken))}) was "
+                    "told apart, so "
+                    "the panels may differ for technical reasons"] if broken else [])
         for r in pop_rows:
             n = names.get(r["code"], {})
             r.update({"superpop": main["superpop"], "name": n.get("name"), "description": n.get("description"),
-                      "samples": n.get("samples"), "latitude": n.get("latitude"), "longitude": n.get("longitude"),
-                      "url": n.get("url")})
+                      "samples": r.get("panel_samples", n.get("samples")), "latitude": n.get("latitude"),
+                      "longitude": n.get("longitude"), "url": n.get("url")})
+            r.pop("panel_samples", None)
+            for k, v in (("panel", "1000 Genomes (phase 3)"), ("twin", None), ("twin_confused", None)):
+                r.setdefault(k, v)
+        call = main["call_level"]
+        if panel_people:
+            call = "High" if near["positions"] >= MIN_REGION_SITES else "Medium"
+            reasons.append(f"Compared with {len(panel_people):,} high-depth reference genomes (1000 Genomes 30× and "
+                           f"the Human Genome Diversity Project) on {near['positions']:,} positions and "
+                           f"{near['pcs']} ancestry axes")
         summary["nearest"] = {**{k: v for k, v in near.items() if k != "confusion"}, "evidence_level": ev,
-                              "evidence_reasons": reasons, "call_level": main["call_level"],
-                              "overall": _weaker(ev, main["call_level"]), "confusion": near["confusion"]}
-        summary["knowledge"] = {"igsr_populations": (st.current("igsr_populations") or {}).get("version")}
+                              "evidence_reasons": reasons, "call_level": call,
+                              "overall": _weaker(ev, call), "confusion": near["confusion"],
+                              "panels": "high_depth" if panel_people else "phase3"}
+        summary["knowledge"] = {k: v for k in ("igsr_populations", "ancestry_panels")
+                                if (v := (st.current(k) or {}).get("version"))}
     hap_rows = []
     sex = pgs._sex(ctx) or ""
     for fn, applies in ((maternal, True), (paternal, sex.upper().startswith("XY"))):
@@ -442,19 +579,21 @@ def _available(ctx: Context) -> str | None:
 def _inputs(ctx: Context) -> list[Path]:
     pca = pgs.pgs_dir(ctx) / "pca"
     aln = ctx.inv.first("cram") or ctx.inv.first("bam")
-    return [p for p in (pca / "reference.pcs", pca / "self.pcs", pgs.out_summary(ctx), variants.vcf_file(ctx),
+    return [p for p in (pca / "reference.pcs", pca / "self.pcs", pca / "self.bed", pgs.out_summary(ctx),
+                        variants.vcf_file(ctx),
                         aln.path if aln else None, qc.out_path(ctx)) if p and p.exists()]
 
 
 def _params(ctx: Context) -> dict:
     st = Store(ctx.cfg)
-    return {"igsr_populations": (st.current("igsr_populations") or {}).get("version"), "mt_tree": MT_TREE,
+    return {"igsr_populations": (st.current("igsr_populations") or {}).get("version"),
+            "ancestry_panels": (st.current("ancestry_panels") or {}).get("version"), "mt_tree": MT_TREE,
             "haplo_env": bool(_env_tool("haplo", "haplogrep3")), "sources": SOURCES, "k": K_NEIGHBOURS}
 
 
 STAGE = Stage(
-    name="ancestry", version="2", title="Ancestry and haplogroups", fn=_ancestry, inputs=_inputs,
+    name="ancestry", version="3", title="Ancestry and haplogroups", fn=_ancestry, inputs=_inputs,
     outputs=lambda ctx: [out_components(ctx), out_populations(ctx), out_haplogroups(ctx), out_pca(ctx),
-                         out_summary(ctx)],
+                         out_summary(ctx)],  # region_pca.parquet is optional (needs ancestry_panels)
     available=_available, params=_params,
 )

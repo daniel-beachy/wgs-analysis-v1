@@ -32,18 +32,25 @@ def _get() -> list[dict]:
 
 
 def rows(records: list[dict]) -> list[dict]:
-    """One row per population in the 1000 Genomes phase 3 panel (the 26 populations the reference uses)."""
+    """One row per population in the 1000 Genomes phase 3 panel (the 26 populations the reference uses) and in the
+    Human Genome Diversity Project (54, used for finer ancestry). HGDP populations have no IGSR code; their IGSR
+    page ID ("YorubaHGDP") is the population name in the HGDP sample file plus "HGDP", so it serves as the code."""
     out = []
     for p in records:
         colls = [c.get("title", "") for c in p.get("dataCollections") or []]
-        if "1000 Genomes phase 3 release" not in colls:
+        hgdp = "Human Genome Diversity Project" in colls
+        if "1000 Genomes phase 3 release" not in colls and not hgdp:
+            continue
+        code = p.get("code") or (p.get("elasticId") if hgdp else None)
+        if not code:
             continue
         sp = p.get("superpopulation") or {}
-        out.append({"code": p["code"], "name": p.get("name"), "description": p.get("description"),
+        out.append({"code": code, "name": p.get("name"), "description": p.get("description"),
                     "superpop": sp.get("code"), "superpop_name": sp.get("name"),
                     "latitude": p.get("latitude"), "longitude": p.get("longitude"),
-                    "samples": (p.get("samples") or {}).get("count"), "url": PAGE.format(code=p["code"])})
-    return sorted(out, key=lambda r: (r["superpop"] or "", r["code"]))
+                    "samples": (p.get("samples") or {}).get("count"), "url": PAGE.format(code=code),
+                    "panel": "hgdp" if hgdp and not p.get("code") else "1000genomes"})
+    return sorted(out, key=lambda r: (r["panel"], r["superpop"] or "", r["code"]))
 
 
 class IgsrPopulations(Source):
@@ -52,8 +59,10 @@ class IgsrPopulations(Source):
     homepage = "https://www.internationalgenome.org/data-portal/population"
     licence = "IGSR data: free to use without restriction (Fort Lauderdale principles)"
     cadence = "rarely"
+    schema = 2
     description = ("The official names and sampling locations of the 26 populations in the 1000 Genomes reference "
-                   "panel, used to describe which reference group your DNA is most similar to.")
+                   "panel and the 54 of the Human Genome Diversity Project, used to describe which reference group "
+                   "your DNA is most similar to.")
 
     def __init__(self) -> None:
         self._records: list[dict] | None = None
@@ -66,7 +75,7 @@ class IgsrPopulations(Source):
 
     def build(self, upstream: list[Upstream], scratch: Path, out: Path) -> Built:
         rs = rows(self._records if self._records is not None else _get())
-        if len(rs) < 26:
+        if sum(r["panel"] == "1000genomes" for r in rs) < 26:
             raise RuntimeError(f"IGSR returned only {len(rs)} phase 3 populations (expected 26)")
         src = scratch / "populations.json"
         src.write_text(json.dumps(rs))
