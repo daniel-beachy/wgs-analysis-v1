@@ -88,5 +88,5 @@ and learn from for a decade:
   need controlled-access regional panels and are out of scope.
 - The public demo (ADR-028): `pixi run demo` rebuilds the HG002 release, then `pixi run demo-site` exports a trimmed
   copy (truth-set releases only), uploads it as a `demo-data-<id>` release asset and deploys
-  https://daniel-beachy.github.io/wgs-analysis-v1/. The portfolio card lives in `~/AI_PROJECTS/portfolio-site`
+  https://daniel-beachy.github.io/wgs-analysis-v1/. The portfolio card lives in `~/AI_PROJECTS/daniel-beachy.github.io`
   (follow its AGENTS.md).
